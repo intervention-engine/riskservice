@@ -4,31 +4,35 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/intervention-engine/fhir/models"
 	"net/http"
 	"time"
 )
 
-func CalculateSimpleRisk(fhirEndpointUrl, patientId string) (*models.RiskAssessment, error) {
+func CalculateSimpleRisk(fhirEndpointUrl, patientId string) (*models.RiskAssessment, *Pie, error) {
+	patientUrl := fmt.Sprintf("%s/Patient/%s", fhirEndpointUrl, patientId)
 	resources := []string{"Conditions", "MedicationStatement"}
+	pie := NewPie(patientUrl)
 	sum := uint32(0)
 	for _, resource := range resources {
 		resourceCount, err := GetCountForPatientResources(fhirEndpointUrl, resource, patientId)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
+		pie.AddSlice(resource, 50, int(*resourceCount))
 		sum += *resourceCount
 	}
 
 	assessment := &models.RiskAssessment{}
-	assessment.Subject = &models.Reference{Reference: fmt.Sprintf("%s/Patient/%s", fhirEndpointUrl, patientId)}
+	assessment.Subject = &models.Reference{Reference: patientUrl}
 	assessment.Date = &models.FHIRDateTime{Time: time.Now(), Precision: models.Timestamp}
 	prediction := models.RiskAssessmentPredictionComponent{}
 	floatSum := float64(sum)
 	prediction.ProbabilityDecimal = &floatSum
 	prediction.Outcome = &models.CodeableConcept{Text: "Negative Outcome"}
 	assessment.Prediction = []models.RiskAssessmentPredictionComponent{prediction}
-	return assessment, nil
+	return assessment, pie, nil
 }
 
 func GetCountForPatientResources(fhirEndpointUrl, resource, patientId string) (*uint32, error) {
@@ -42,6 +46,7 @@ func GetCountForPatientResources(fhirEndpointUrl, resource, patientId string) (*
 	bundle := &models.Bundle{}
 	err = decoder.Decode(bundle)
 	if err != nil {
+		spew.Dump(err)
 		return nil, errors.New(fmt.Sprintf("Could not decode the %s bundle for patient: %s", resource, patientId))
 	}
 	return bundle.Total, nil
