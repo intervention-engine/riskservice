@@ -1,0 +1,52 @@
+{
+  "id": "55b7a4a51cd462bf29000001",
+  "resourceType": "searchset",
+  "total": 3,
+  "entry": [
+    {
+      "id": "554bc3fda749dcd47b000007",
+      "resource": {
+        "resourceType": "Condition",
+        "code": {
+          "coding": [
+            {
+              "system": "http://hl7.org/fhir/sid/icd-9",
+              "code": "401.0"
+            }
+          ],
+          "text": "Diagnosis, Active: Hypertension"
+        }
+      }
+    },
+    {
+      "id": "554bc3fda749dcd47b000009",
+      "resource": {
+        "resourceType": "Condition",
+        "code": {
+          "coding": [
+            {
+              "system": "http://hl7.org/fhir/sid/icd-9",
+              "code": "296.21"
+            }
+          ],
+          "text": "Diagnosis, Active: Major Depression"
+        }
+      }
+    },
+    {
+      "id": "554bc3fda749dcd47b000008",
+      "resource": {
+        "resourceType": "Condition",
+        "code": {
+          "coding": [
+            {
+              "system": "http://hl7.org/fhir/sid/icd-9",
+              "code": "434.91"
+            }
+          ],
+          "text": "Diagnosis, Active: Stroke"
+        }
+      }
+    }
+  ]
+}
