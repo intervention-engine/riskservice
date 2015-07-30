@@ -1,17 +1,18 @@
-package riskservice
+package assessment
 
 import (
 	"github.com/intervention-engine/fhir/models"
+	"github.com/intervention-engine/riskservice/fhir"
 	"time"
 )
 
 func CalculateSimpleRisk(fhirEndpointUrl, patientId string) (*models.RiskAssessment, *Pie, error) {
-	patientUrl := PatientUrl(fhirEndpointUrl, patientId)
+	patientUrl := fhir.PatientUrl(fhirEndpointUrl, patientId)
 	resources := []string{"Conditions", "MedicationStatement"}
 	pie := NewPie(patientUrl)
 	sum := uint32(0)
 	for _, resource := range resources {
-		resourceCount, err := GetCountForPatientResources(fhirEndpointUrl, resource, patientId)
+		resourceCount, err := fhir.GetCountForPatientResources(fhirEndpointUrl, resource, patientId)
 		if err != nil {
 			return nil, nil, err
 		}

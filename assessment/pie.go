@@ -1,6 +1,7 @@
-package riskservice
+package assessment
 
 import (
+	"gopkg.in/mgo.v2/bson"
 	"time"
 )
 
@@ -10,6 +11,7 @@ import (
 // to one of these.
 
 type Pie struct {
+	Id      bson.ObjectId `bson:"_id"`
 	Slices  []Slice
 	Patient string
 	Created time.Time
@@ -25,6 +27,7 @@ func NewPie(patientUrl string) *Pie {
 	pie := &Pie{}
 	pie.Patient = patientUrl
 	pie.Created = time.Now()
+	pie.Id = bson.NewObjectId()
 	return pie
 }
 

@@ -1,7 +1,8 @@
-package riskservice
+package assessment
 
 import (
 	"github.com/intervention-engine/fhir/models"
+	"github.com/intervention-engine/riskservice/fhir"
 	"strings"
 	"time"
 )
@@ -26,13 +27,13 @@ func NewCHAD(name, code string) CHADCondition {
 
 // An implementation of https://en.wikipedia.org/wiki/CHA2DS2%E2%80%93VASc_score
 func CalculateCHADSRisk(fhirEndpointUrl, patientId string) (*models.RiskAssessment, *Pie, error) {
-	patientUrl := PatientUrl(fhirEndpointUrl, patientId)
+	patientUrl := fhir.PatientUrl(fhirEndpointUrl, patientId)
 	pie := NewPie(patientUrl)
-	conditionBundle, conditionErr := GetPatientConditions(ResourcesForPatientUrl(fhirEndpointUrl, patientId, "Condition"))
+	conditionBundle, conditionErr := fhir.GetPatientConditions(fhir.ResourcesForPatientUrl(fhirEndpointUrl, patientId, "Condition"))
 	if conditionErr != nil {
 		return nil, nil, conditionErr
 	}
-	patient, patientErr := GetPatient(PatientUrl(fhirEndpointUrl, patientId))
+	patient, patientErr := fhir.GetPatient(fhir.PatientUrl(fhirEndpointUrl, patientId))
 	if patientErr != nil {
 		return nil, nil, patientErr
 	}

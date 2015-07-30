@@ -1,4 +1,4 @@
-package riskservice
+package assessment
 
 import (
 	"github.com/pebbe/util"

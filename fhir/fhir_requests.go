@@ -1,4 +1,4 @@
-package riskservice
+package fhir
 
 import (
 	"encoding/json"
