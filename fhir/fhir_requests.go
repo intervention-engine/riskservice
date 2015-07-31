@@ -29,19 +29,26 @@ func GetCount(fullFhirUrl string) (int, error) {
 	return int(*total), nil
 }
 
-func GetPatientConditions(fullFhirUrl string) (*models.ConditionBundle, error) {
+func GetPatientConditions(fullFhirUrl string) ([]models.Condition, error) {
 	resp, err := http.Get(fullFhirUrl)
 	defer resp.Body.Close()
 	if err != nil {
 		return nil, errors.New(fmt.Sprintf("Could not get: %s", fullFhirUrl))
 	}
 	decoder := json.NewDecoder(resp.Body)
-	bundle := &models.ConditionBundle{}
+	bundle := &models.Bundle{}
 	err = decoder.Decode(bundle)
 	if err != nil {
 		return nil, errors.New(fmt.Sprintf("Could not decode: %s", fullFhirUrl))
 	}
-	return bundle, nil
+	var conditions []models.Condition
+	for _, resource := range bundle.Entry {
+		c, ok := resource.Resource.(models.Condition)
+		if ok {
+			conditions = append(conditions, c)
+		}
+	}
+	return conditions, nil
 }
 
 func GetPatient(fullFhirUrl string) (*models.Patient, error) {

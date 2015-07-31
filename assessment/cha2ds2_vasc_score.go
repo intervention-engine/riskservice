@@ -29,7 +29,7 @@ func NewCHAD(name, code string) CHADCondition {
 func CalculateCHADSRisk(fhirEndpointUrl, patientId string) (*models.RiskAssessment, *Pie, error) {
 	patientUrl := fhir.PatientUrl(fhirEndpointUrl, patientId)
 	pie := NewPie(patientUrl)
-	conditionBundle, conditionErr := fhir.GetPatientConditions(fhir.ResourcesForPatientUrl(fhirEndpointUrl, patientId, "Condition"))
+	conditions, conditionErr := fhir.GetPatientConditions(fhir.ResourcesForPatientUrl(fhirEndpointUrl, patientId, "Condition"))
 	if conditionErr != nil {
 		return nil, nil, conditionErr
 	}
@@ -37,7 +37,7 @@ func CalculateCHADSRisk(fhirEndpointUrl, patientId string) (*models.RiskAssessme
 	if patientErr != nil {
 		return nil, nil, patientErr
 	}
-	chadScore := CalculateConditionPortion(conditionBundle, pie)
+	chadScore := CalculateConditionPortion(conditions, pie)
 	chadScore += CalculateDemographicPortion(patient, pie)
 
 	assessment := &models.RiskAssessment{}
@@ -73,7 +73,7 @@ func CalculateDemographicPortion(patient *models.Patient, pie *Pie) int {
 	return chadScore
 }
 
-func CalculateConditionPortion(conditionBundle *models.ConditionBundle, pie *Pie) int {
+func CalculateConditionPortion(patientConditions []models.Condition, pie *Pie) int {
 	conditions := []CHADCondition{NewCHAD("Congestive Heart Failure", "428")}
 	conditions = append(conditions, NewCHAD("Hypertension", "401"))
 	conditions = append(conditions, NewCHAD("Diabetes", "250"))
@@ -87,7 +87,7 @@ func CalculateConditionPortion(conditionBundle *models.ConditionBundle, pie *Pie
 	for _, condition := range conditions {
 		weight := condition.Points * PieSliceWidth
 		value := 0
-		if FuzzyFindConditionInBundle(condition.Code, condition.System, conditionBundle) {
+		if FuzzyFindInConditions(condition.Code, condition.System, patientConditions) {
 			value = condition.Points
 		}
 		chadScore += value
@@ -97,9 +97,9 @@ func CalculateConditionPortion(conditionBundle *models.ConditionBundle, pie *Pie
 	return chadScore
 }
 
-func FuzzyFindConditionInBundle(codeStart, codeSystem string, bundle *models.ConditionBundle) bool {
-	for _, entry := range bundle.Entry {
-		for _, coding := range entry.Resource.Code.Coding {
+func FuzzyFindInConditions(codeStart, codeSystem string, conditions []models.Condition) bool {
+	for _, condition := range conditions {
+		for _, coding := range condition.Code.Coding {
 			if strings.HasPrefix(coding.Code, codeStart) && coding.System == codeSystem {
 				return true
 			}
