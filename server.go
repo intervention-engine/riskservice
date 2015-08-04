@@ -19,6 +19,6 @@ func main() {
 		panic("Can't connect to the database")
 	}
 	defer session.Close()
-	server.RegisterRiskHandlers(e, session.DB("riskservice"), "http://localhost:9000")
+	server.RegisterRiskHandlers(e, session.DB("riskservice"), "http://localhost:9000/pies/")
 	e.Run(":9000")
 }
