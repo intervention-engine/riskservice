@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/intervention-engine/fhir/models"
 	"net/http"
 	"time"
@@ -43,7 +42,6 @@ func GetPatientConditions(fullFhirUrl string, ts time.Time) ([]models.Condition,
 	if err != nil {
 		return nil, errors.New(fmt.Sprintf("Could not decode: %s", fullFhirUrl))
 	}
-	spew.Println(bundle)
 	var conditions []models.Condition
 	for _, resource := range bundle.Entry {
 		c, ok := resource.Resource.(models.Condition)
