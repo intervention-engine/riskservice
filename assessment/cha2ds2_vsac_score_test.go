@@ -65,7 +65,7 @@ func (cs *CHADSSuite) TearDownSuite(c *C) {
 func (cs *CHADSSuite) TestAge(c *C) {
 	birthDate := &models.FHIRDateTime{Time: time.Date(1978, time.July, 1, 0, 0, 0, 0, time.UTC), Precision: models.Date}
 	patient := &models.Patient{BirthDate: birthDate}
-	age := Age(patient)
+	age := Age(patient, time.Date(2015, time.August, 1, 0, 0, 0, 0, time.UTC))
 	c.Assert(age, Equals, 37)
 }
 
@@ -94,7 +94,7 @@ func (cs *CHADSSuite) TestCalculateDemographicPortion(c *C) {
 	pie := NewPie("")
 	birthDate := &models.FHIRDateTime{Time: time.Date(1945, time.July, 1, 0, 0, 0, 0, time.UTC), Precision: models.Date}
 	patient := &models.Patient{BirthDate: birthDate, Gender: "female"}
-	c.Assert(CalculateDemographicPortion(patient, pie), Equals, 2)
+	c.Assert(CalculateDemographicPortion(patient, pie, time.Date(2015, time.August, 1, 0, 0, 0, 0, time.UTC)), Equals, 2)
 	c.Assert(len(pie.Slices), Equals, 2)
 	c.Assert(pie.Slices[0].Name, Equals, "Gender")
 	c.Assert(pie.Slices[0].Weight, Equals, PieSliceWidth)
@@ -105,7 +105,7 @@ func (cs *CHADSSuite) TestCalculateDemographicPortion(c *C) {
 }
 
 func (cs *CHADSSuite) TestCalculateCHADSRisk(c *C) {
-	ra, pie, err := CalculateCHADSRisk(cs.Server.URL, "foo")
+	ra, pie, err := CalculateCHADSRisk(cs.Server.URL, "foo", time.Date(2015, time.August, 1, 0, 0, 0, 0, time.UTC))
 	util.CheckErr(err)
 	c.Assert(*ra.Prediction[0].ProbabilityDecimal, Equals, 6.7)
 	c.Assert(len(pie.Slices), Equals, 7)

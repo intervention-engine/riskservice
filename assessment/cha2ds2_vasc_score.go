@@ -26,10 +26,10 @@ func NewCHAD(name, code string) CHADCondition {
 }
 
 // An implementation of https://en.wikipedia.org/wiki/CHA2DS2%E2%80%93VASc_score
-func CalculateCHADSRisk(fhirEndpointUrl, patientId string) (*models.RiskAssessment, *Pie, error) {
+func CalculateCHADSRisk(fhirEndpointUrl, patientId string, ts time.Time) (*models.RiskAssessment, *Pie, error) {
 	patientUrl := fhir.PatientUrl(fhirEndpointUrl, patientId)
 	pie := NewPie(patientUrl)
-	conditions, conditionErr := fhir.GetPatientConditions(fhir.ResourcesForPatientUrl(fhirEndpointUrl, patientId, "Condition"))
+	conditions, conditionErr := fhir.GetPatientConditions(fhir.ResourcesForPatientUrl(fhirEndpointUrl, patientId, "Condition"), ts)
 	if conditionErr != nil {
 		return nil, nil, conditionErr
 	}
@@ -38,11 +38,11 @@ func CalculateCHADSRisk(fhirEndpointUrl, patientId string) (*models.RiskAssessme
 		return nil, nil, patientErr
 	}
 	chadScore := CalculateConditionPortion(conditions, pie)
-	chadScore += CalculateDemographicPortion(patient, pie)
+	chadScore += CalculateDemographicPortion(patient, pie, ts)
 
 	assessment := &models.RiskAssessment{}
 	assessment.Subject = &models.Reference{Reference: patientUrl}
-	assessment.Date = &models.FHIRDateTime{Time: time.Now(), Precision: models.Timestamp}
+	assessment.Date = &models.FHIRDateTime{Time: ts, Precision: models.Timestamp}
 	prediction := models.RiskAssessmentPredictionComponent{}
 	strokeRisk := ScoreToStrokeRisk[chadScore]
 	prediction.ProbabilityDecimal = &strokeRisk
@@ -51,7 +51,7 @@ func CalculateCHADSRisk(fhirEndpointUrl, patientId string) (*models.RiskAssessme
 	return assessment, pie, nil
 }
 
-func CalculateDemographicPortion(patient *models.Patient, pie *Pie) int {
+func CalculateDemographicPortion(patient *models.Patient, pie *Pie, ts time.Time) int {
 	chadScore := 0
 	if patient.Gender == "female" {
 		pie.AddSlice("Gender", PieSliceWidth, 1)
@@ -59,7 +59,7 @@ func CalculateDemographicPortion(patient *models.Patient, pie *Pie) int {
 	} else {
 		pie.AddSlice("Gender", PieSliceWidth, 0)
 	}
-	age := Age(patient)
+	age := Age(patient, ts)
 	switch {
 	case age >= 65 && age < 75:
 		pie.AddSlice("Age", PieSliceWidth*2, 1)
@@ -108,11 +108,10 @@ func FuzzyFindInConditions(codeStart, codeSystem string, conditions []models.Con
 	return false
 }
 
-func Age(patient *models.Patient) int {
-	now := time.Now()
+func Age(patient *models.Patient, ts time.Time) int {
 	patientBirthDay := patient.BirthDate.Time
-	age := now.Year() - patientBirthDay.Year()
-	if patientBirthDay.YearDay() > now.YearDay() {
+	age := ts.Year() - patientBirthDay.Year()
+	if patientBirthDay.YearDay() > ts.YearDay() {
 		age--
 	}
 	return age

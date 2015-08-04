@@ -6,23 +6,29 @@ import (
 	"time"
 )
 
-func CalculateSimpleRisk(fhirEndpointUrl, patientId string) (*models.RiskAssessment, *Pie, error) {
+func CalculateSimpleRisk(fhirEndpointUrl, patientId string, ts time.Time) (*models.RiskAssessment, *Pie, error) {
 	patientUrl := fhir.PatientUrl(fhirEndpointUrl, patientId)
-	resources := []string{"Conditions", "MedicationStatement"}
+
 	pie := NewPie(patientUrl)
 	sum := uint32(0)
-	for _, resource := range resources {
-		resourceCount, err := fhir.GetCountForPatientResources(fhirEndpointUrl, resource, patientId)
-		if err != nil {
-			return nil, nil, err
-		}
-		pie.AddSlice(resource, 50, resourceCount)
-		sum += uint32(resourceCount)
+
+	conditions, err := fhir.GetPatientConditions(fhir.ResourcesForPatientUrl(fhirEndpointUrl, patientId, "Condition"), ts)
+	if err != nil {
+		return nil, nil, err
 	}
+	pie.AddSlice("Conditions", 50, len(conditions))
+	sum += uint32(len(conditions))
+
+	medicationStatements, err := fhir.GetPatientMedicationStatements(fhir.ResourcesForPatientUrl(fhirEndpointUrl, patientId, "MedicationStatement"), ts)
+	if err != nil {
+		return nil, nil, err
+	}
+	pie.AddSlice("Medications", 50, len(medicationStatements))
+	sum += uint32(len(medicationStatements))
 
 	assessment := &models.RiskAssessment{}
 	assessment.Subject = &models.Reference{Reference: patientUrl}
-	assessment.Date = &models.FHIRDateTime{Time: time.Now(), Precision: models.Timestamp}
+	assessment.Date = &models.FHIRDateTime{Time: ts, Precision: models.Timestamp}
 	prediction := models.RiskAssessmentPredictionComponent{}
 	floatSum := float64(sum)
 	prediction.ProbabilityDecimal = &floatSum

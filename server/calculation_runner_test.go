@@ -44,7 +44,7 @@ func (crs *CalculationRunnerSuite) TearDownSuite(c *C) {
 	crs.DBServer.Stop()
 }
 
-func MockRiskCalculation(fhirEndpointUrl, patientId string) (*models.RiskAssessment, *assessment.Pie, error) {
+func MockRiskCalculation(fhirEndpointUrl, patientId string, ts time.Time) (*models.RiskAssessment, *assessment.Pie, error) {
 	pie := assessment.NewPie("")
 	pie.AddSlice("Humors", 50, 1)
 	pie.AddSlice("Blood-letting", 50, 4)
@@ -63,7 +63,7 @@ func (crs *CalculationRunnerSuite) TestCreateRiskAssessment(c *C) {
 	session := crs.DBServer.Session()
 	defer session.Close()
 	db := session.DB("test")
-	err := CreateRiskAssessment(crs.Server.URL, "foo", "http://pie.org", MockRiskCalculation, db)
+	err := CreateRiskAssessment(crs.Server.URL, "foo", "http://pie.org", MockRiskCalculation, db, time.Date(2015, time.August, 1, 0, 0, 0, 0, time.UTC))
 	util.CheckErr(err)
 	count, _ := db.C("pies").Count()
 	c.Assert(count, Equals, 1)
