@@ -11,16 +11,16 @@ import (
 // to one of these.
 
 type Pie struct {
-	Id      bson.ObjectId `bson:"_id"`
-	Slices  []Slice
-	Patient string
-	Created time.Time
+	Id      bson.ObjectId `bson:"_id" json:"id"`
+	Slices  []Slice       `json:"slices"`
+	Patient string        `json:"patient"`
+	Created time.Time     `json:"created"`
 }
 
 type Slice struct {
-	Name   string
-	Weight int
-	Value  int
+	Name   string `json:"name"`
+	Weight int    `json:"weight"`
+	Value  int    `json:"value"`
 }
 
 func NewPie(patientUrl string) *Pie {
