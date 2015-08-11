@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/intervention-engine/riskservice/server"
 	"github.com/labstack/echo"
+	"github.com/labstack/echo/middleware"
 	"gopkg.in/mgo.v2"
 	"os"
 )
@@ -20,5 +21,6 @@ func main() {
 	}
 	defer session.Close()
 	server.RegisterRiskHandlers(e, session.DB("riskservice"), "http://localhost:9000/pies/")
+	e.Use(middleware.Logger())
 	e.Run(":9000")
 }
