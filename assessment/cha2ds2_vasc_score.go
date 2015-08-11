@@ -54,21 +54,21 @@ func CalculateCHADSRisk(fhirEndpointUrl, patientId string, ts time.Time) (*model
 func CalculateDemographicPortion(patient *models.Patient, pie *Pie, ts time.Time) int {
 	chadScore := 0
 	if patient.Gender == "female" {
-		pie.AddSlice("Gender", PieSliceWidth, 1)
+		pie.AddSlice("Gender", PieSliceWidth, 1, 1)
 		chadScore += 1
 	} else {
-		pie.AddSlice("Gender", PieSliceWidth, 0)
+		pie.AddSlice("Gender", PieSliceWidth, 0, 1)
 	}
 	age := Age(patient, ts)
 	switch {
 	case age >= 65 && age < 75:
-		pie.AddSlice("Age", PieSliceWidth*2, 1)
+		pie.AddSlice("Age", PieSliceWidth*2, 1, 2)
 		chadScore++
 	case age >= 75:
-		pie.AddSlice("Age", PieSliceWidth*2, 2)
+		pie.AddSlice("Age", PieSliceWidth*2, 2, 2)
 		chadScore += 2
 	default:
-		pie.AddSlice("Age", PieSliceWidth*2, 0)
+		pie.AddSlice("Age", PieSliceWidth*2, 0, 2)
 	}
 	return chadScore
 }
@@ -91,7 +91,7 @@ func CalculateConditionPortion(patientConditions []models.Condition, pie *Pie) i
 			value = condition.Points
 		}
 		chadScore += value
-		pie.AddSlice(condition.Name, weight, value)
+		pie.AddSlice(condition.Name, weight, value, condition.Points)
 	}
 
 	return chadScore

@@ -18,9 +18,10 @@ type Pie struct {
 }
 
 type Slice struct {
-	Name   string `json:"name"`
-	Weight int    `json:"weight"`
-	Value  int    `json:"value"`
+	Name     string `json:"name"`
+	Weight   int    `json:"weight"`
+	Value    int    `json:"value"`
+	MaxValue int    `json:"maxValue,omitempty"`
 }
 
 func NewPie(patientUrl string) *Pie {
@@ -31,7 +32,10 @@ func NewPie(patientUrl string) *Pie {
 	return pie
 }
 
-func (p *Pie) AddSlice(name string, weight, value int) {
-	slice := Slice{Name: name, Weight: weight, Value: value}
+func (p *Pie) AddSlice(name string, weight int, value ...int) {
+	slice := Slice{Name: name, Weight: weight, Value: value[0]}
+	if len(value) == 2 {
+		slice.MaxValue = value[1]
+	}
 	p.Slices = append(p.Slices, slice)
 }
