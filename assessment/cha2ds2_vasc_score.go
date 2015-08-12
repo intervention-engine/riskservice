@@ -42,6 +42,8 @@ func CalculateCHADSRisk(fhirEndpointUrl, patientId string, ts time.Time) (*model
 
 	assessment := &models.RiskAssessment{}
 	assessment.Subject = &models.Reference{Reference: patientUrl}
+	methodCoding := models.Coding{System: "http://interventionengine.org/risk-assessments", Code: "CHADS"}
+	assessment.Method = &models.CodeableConcept{Text: "CHA2DS2–VASc score", Coding: []models.Coding{methodCoding}}
 	assessment.Date = &models.FHIRDateTime{Time: ts, Precision: models.Timestamp}
 	prediction := models.RiskAssessmentPredictionComponent{}
 	strokeRisk := ScoreToStrokeRisk[chadScore]

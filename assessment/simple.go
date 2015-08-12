@@ -28,6 +28,8 @@ func CalculateSimpleRisk(fhirEndpointUrl, patientId string, ts time.Time) (*mode
 
 	assessment := &models.RiskAssessment{}
 	assessment.Subject = &models.Reference{Reference: patientUrl}
+	methodCoding := models.Coding{System: "http://interventionengine.org/risk-assessments", Code: "Simple"}
+	assessment.Method = &models.CodeableConcept{Text: "Simple Conditions + Medications", Coding: []models.Coding{methodCoding}}
 	assessment.Date = &models.FHIRDateTime{Time: ts, Precision: models.Timestamp}
 	prediction := models.RiskAssessmentPredictionComponent{}
 	floatSum := float64(sum)
