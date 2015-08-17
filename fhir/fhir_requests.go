@@ -46,7 +46,7 @@ func GetPatientConditions(fullFhirUrl string, ts time.Time) ([]models.Condition,
 	for _, resource := range bundle.Entry {
 		c, ok := resource.Resource.(models.Condition)
 		if ok {
-			if c.OnsetDateTime == nil || (c.OnsetDateTime != nil && c.OnsetDateTime.Time.After(ts)) {
+			if c.OnsetDateTime == nil || (c.OnsetDateTime != nil && c.OnsetDateTime.Time.Before(ts)) {
 				conditions = append(conditions, c)
 			}
 		}
@@ -70,7 +70,7 @@ func GetPatientMedicationStatements(fullFhirUrl string, ts time.Time) ([]models.
 	for _, resource := range bundle.Entry {
 		ms, ok := resource.Resource.(models.MedicationStatement)
 		if ok {
-			if ms.EffectiveDateTime == nil || (ms.EffectiveDateTime != nil && ms.EffectiveDateTime.Time.After(ts)) {
+			if ms.EffectiveDateTime == nil || (ms.EffectiveDateTime != nil && ms.EffectiveDateTime.Time.Before(ts)) {
 				medicationStatements = append(medicationStatements, ms)
 			}
 		}
