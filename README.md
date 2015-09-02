@@ -1,6 +1,12 @@
 # riskservice
 Risk assessment services intended to work with FHIR servers
 
+Requires Go 1.5 and MongoDB 3.X
+
+Command line flags:
+* registerURL - Provide a FHIR endpoint to where the application will register a subscription
+* registerENV - For use when running Dockerized. This will look at the IE_PORT_3001_TCP environment variables for a
+FHIR server endpoint.
 
 # License
 
