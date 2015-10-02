@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/intervention-engine/fhir/models"
 	"net/http"
 	"time"
+
+	"github.com/intervention-engine/fhir/models"
 )
 
 func GetCountForPatientResources(fhirEndpointUrl, resource, patientId string) (int, error) {
@@ -46,12 +47,23 @@ func GetPatientConditions(fullFhirUrl string, ts time.Time) ([]models.Condition,
 	for _, resource := range bundle.Entry {
 		c, ok := resource.Resource.(models.Condition)
 		if ok {
-			if c.OnsetDateTime == nil || (c.OnsetDateTime != nil && c.OnsetDateTime.Time.Before(ts)) {
+			cStart := getConditionStart(c)
+			if cStart == nil || cStart.Time.Before(ts) {
 				conditions = append(conditions, c)
 			}
 		}
 	}
 	return conditions, nil
+}
+
+func getConditionStart(c models.Condition) *models.FHIRDateTime {
+	if c.OnsetDateTime != nil {
+		return c.OnsetDateTime
+	} else if c.OnsetPeriod != nil {
+		return c.OnsetPeriod.Start
+	}
+	// TODO: To support the full range of options, we should also support onsetAge and onsetRange
+	return nil
 }
 
 func GetPatientMedicationStatements(fullFhirUrl string, ts time.Time) ([]models.MedicationStatement, error) {
@@ -70,12 +82,22 @@ func GetPatientMedicationStatements(fullFhirUrl string, ts time.Time) ([]models.
 	for _, resource := range bundle.Entry {
 		ms, ok := resource.Resource.(models.MedicationStatement)
 		if ok {
-			if ms.EffectiveDateTime == nil || (ms.EffectiveDateTime != nil && ms.EffectiveDateTime.Time.Before(ts)) {
+			msStart := getMedicationStatementStart(ms)
+			if msStart == nil || msStart.Time.Before(ts) {
 				medicationStatements = append(medicationStatements, ms)
 			}
 		}
 	}
 	return medicationStatements, nil
+}
+
+func getMedicationStatementStart(med models.MedicationStatement) *models.FHIRDateTime {
+	if med.EffectiveDateTime != nil {
+		return med.EffectiveDateTime
+	} else if med.EffectivePeriod != nil {
+		return med.EffectivePeriod.Start
+	}
+	return nil
 }
 
 func GetPatient(fullFhirUrl string) (*models.Patient, error) {
