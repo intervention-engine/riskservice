@@ -2,16 +2,18 @@ package server
 
 import (
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
 	"github.com/intervention-engine/fhir/models"
 	"github.com/intervention-engine/riskservice/assessment"
 	"github.com/pebbe/util"
 	. "gopkg.in/check.v1"
 	"gopkg.in/mgo.v2/dbtest"
-	"net/http"
-	"net/http/httptest"
-	"strings"
-	"testing"
-	"time"
 )
 
 type CalculationRunnerSuite struct {
@@ -57,6 +59,34 @@ func MockRiskCalculation(fhirEndpointUrl, patientId string, ts time.Time) (*mode
 	prediction.Outcome = &models.CodeableConcept{Text: "Stroke"}
 	assessment.Prediction = []models.RiskAssessmentPredictionComponent{prediction}
 	return assessment, pie, nil
+}
+
+func (crs *CalculationRunnerSuite) TestRunner(c *C) {
+	requests := make(chan CalculationRequest)
+	done := make(chan struct{})
+	riskAssessments := []RiskAssessmentCalculation{MockRiskCalculation}
+	session := crs.DBServer.Session()
+	defer session.Close()
+	db := session.DB("test")
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go Runner(requests, done, "http://pie.org", riskAssessments, db, &wg)
+	requests <- CalculationRequest{"http://fhir.org", "foo", time.Now(), time.Now()}
+	requests <- CalculationRequest{"http://fhir.org", "bar", time.Now(), time.Now()}
+	time.Sleep(1 * time.Second)
+	requests <- CalculationRequest{"http://fhir.org", "foo", time.Now(), time.Now()}
+	time.Sleep(2500 * time.Millisecond)
+	count, _ := db.C("pies").Count()
+	// Should have the pie only for bar
+	c.Assert(count, Equals, 1)
+	time.Sleep(1 * time.Second)
+	count, _ = db.C("pies").Count()
+	// Should have all pies
+	c.Assert(count, Equals, 3)
+	close(done)
+	wg.Wait()
+	// It actually stopped the runner
+	c.Succeed()
 }
 
 func (crs *CalculationRunnerSuite) TestCreateRiskAssessment(c *C) {

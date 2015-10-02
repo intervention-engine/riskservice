@@ -1,14 +1,16 @@
 package server
 
 import (
+	"time"
+
 	"github.com/intervention-engine/riskservice/assessment"
 	"github.com/labstack/echo"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
-	"time"
 )
 
-func RegisterRiskHandlers(e *echo.Echo, db *mgo.Database, baseUrl string) {
+// Sets up the http request handlers with Echo
+func RegisterRiskHandlers(e *echo.Echo, db *mgo.Database, baseUrl string, requestChan chan<- CalculationRequest) {
 	e.Get("/pies/:id", func(c *echo.Context) (err error) {
 		pie := &assessment.Pie{}
 		id := c.Param("id")
@@ -32,13 +34,7 @@ func RegisterRiskHandlers(e *echo.Echo, db *mgo.Database, baseUrl string) {
 		if err != nil {
 			c.String(400, "Expected timestamp to be populated with an RFC3339 formatted time.")
 		}
-		riskAssessments := []RiskAssessmentCalculation{assessment.CalculateCHADSRisk, assessment.CalculateSimpleRisk}
-		for _, rac := range riskAssessments {
-			err = CreateRiskAssessment(fhirEndpointUrl, patientId, baseUrl, rac, db, ts)
-			if err != nil {
-				return
-			}
-		}
+		requestChan <- CalculationRequest{fhirEndpointUrl, patientId, ts, time.Now()}
 		return
 	})
 }
