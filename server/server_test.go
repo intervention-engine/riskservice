@@ -3,14 +3,15 @@ package server
 import (
 	"bytes"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+
 	"github.com/intervention-engine/riskservice/assessment"
 	"github.com/labstack/echo"
 	"github.com/pebbe/util"
 	. "gopkg.in/check.v1"
 	"gopkg.in/mgo.v2/dbtest"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 )
 
 type ServerSuite struct {
@@ -38,7 +39,7 @@ func (s *ServerSuite) TestRegisterRiskHandlers(c *C) {
 	session := s.DBServer.Session()
 	defer session.Close()
 	db := session.DB("test")
-	RegisterRiskHandlers(e, db, "http://foo.com")
+	RegisterRiskHandlers(e, db, "http://foo.com", make(chan CalculationRequest))
 	server := httptest.NewServer(e)
 	pie := assessment.NewPie(patientUrl)
 	db.C("pies").Insert(pie)
