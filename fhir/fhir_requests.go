@@ -48,7 +48,7 @@ func GetPatientConditions(fullFhirUrl string, ts time.Time) ([]models.Condition,
 		c, ok := resource.Resource.(models.Condition)
 		if ok {
 			cStart := getConditionStart(c)
-			if cStart == nil || cStart.Time.Before(ts) {
+			if cStart == nil || cStart.Time.Before(ts) || cStart.Time.Equal(ts) {
 				conditions = append(conditions, c)
 			}
 		}
@@ -83,7 +83,7 @@ func GetPatientMedicationStatements(fullFhirUrl string, ts time.Time) ([]models.
 		ms, ok := resource.Resource.(models.MedicationStatement)
 		if ok {
 			msStart := getMedicationStatementStart(ms)
-			if msStart == nil || msStart.Time.Before(ts) {
+			if msStart == nil || msStart.Time.Before(ts) || msStart.Time.Equal(ts) {
 				medicationStatements = append(medicationStatements, ms)
 			}
 		}
