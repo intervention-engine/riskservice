@@ -33,6 +33,7 @@ func RegisterRiskHandlers(e *echo.Echo, db *mgo.Database, baseUrl string, reques
 		ts, err := time.Parse(time.RFC3339, stringTime)
 		if err != nil {
 			c.String(400, "Expected timestamp to be populated with an RFC3339 formatted time.")
+			return
 		}
 		requestChan <- CalculationRequest{fhirEndpointUrl, patientId, ts, time.Now()}
 		return
