@@ -1,10 +1,11 @@
 package assessment
 
 import (
-	"github.com/intervention-engine/fhir/models"
-	"github.com/intervention-engine/riskservice/fhir"
 	"strings"
 	"time"
+
+	"github.com/intervention-engine/fhir/models"
+	"github.com/intervention-engine/riskservice/fhir"
 )
 
 type CHADCondition struct {
@@ -75,7 +76,7 @@ func CalculateDemographicPortion(patient *models.Patient, pie *Pie, ts time.Time
 	return chadScore
 }
 
-func CalculateConditionPortion(patientConditions []models.Condition, pie *Pie) int {
+func CalculateConditionPortion(patientConditions []*models.Condition, pie *Pie) int {
 	conditions := []CHADCondition{NewCHAD("Congestive Heart Failure", "428")}
 	conditions = append(conditions, NewCHAD("Hypertension", "401"))
 	conditions = append(conditions, NewCHAD("Diabetes", "250"))
@@ -99,7 +100,7 @@ func CalculateConditionPortion(patientConditions []models.Condition, pie *Pie) i
 	return chadScore
 }
 
-func FuzzyFindInConditions(codeStart, codeSystem string, conditions []models.Condition) bool {
+func FuzzyFindInConditions(codeStart, codeSystem string, conditions []*models.Condition) bool {
 	for _, condition := range conditions {
 		for _, coding := range condition.Code.Coding {
 			if strings.HasPrefix(coding.Code, codeStart) && coding.System == codeSystem {

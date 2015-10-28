@@ -2,14 +2,15 @@ package assessment
 
 import (
 	"bytes"
-	"github.com/pebbe/util"
-	. "gopkg.in/check.v1"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/pebbe/util"
+	. "gopkg.in/check.v1"
 )
 
 type SimpleSuite struct {
