@@ -3,20 +3,21 @@ package assessment
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/intervention-engine/fhir/models"
-	"github.com/pebbe/util"
-	. "gopkg.in/check.v1"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/intervention-engine/fhir/models"
+	"github.com/pebbe/util"
+	. "gopkg.in/check.v1"
 )
 
 type CHADSSuite struct {
 	Bundle     *models.Bundle
 	Server     *httptest.Server
-	Conditions []models.Condition
+	Conditions []*models.Condition
 }
 
 var _ = Suite(&CHADSSuite{})
@@ -47,9 +48,9 @@ func (cs *CHADSSuite) SetUpSuite(c *C) {
 	})
 	cs.Server = httptest.NewServer(handler)
 
-	var conditions []models.Condition
+	var conditions []*models.Condition
 	for _, resource := range bundle.Entry {
-		c, ok := resource.Resource.(models.Condition)
+		c, ok := resource.Resource.(*models.Condition)
 		if ok {
 			conditions = append(conditions, c)
 		}
