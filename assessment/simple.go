@@ -1,9 +1,10 @@
 package assessment
 
 import (
+	"time"
+
 	"github.com/intervention-engine/fhir/models"
 	"github.com/intervention-engine/riskservice/fhir"
-	"time"
 )
 
 func CalculateSimpleRisk(fhirEndpointUrl, patientId string, ts time.Time) (*models.RiskAssessment, *Pie, error) {
@@ -16,8 +17,14 @@ func CalculateSimpleRisk(fhirEndpointUrl, patientId string, ts time.Time) (*mode
 	if err != nil {
 		return nil, nil, err
 	}
-	pie.AddSlice("Conditions", 50, len(conditions))
-	sum += uint32(len(conditions))
+	conditionCount := 0
+	for _, condition := range conditions {
+		if condition.VerificationStatus == "confirmed" {
+			conditionCount++
+		}
+	}
+	pie.AddSlice("Conditions", 50, conditionCount)
+	sum += uint32(conditionCount)
 
 	medicationStatements, err := fhir.GetPatientMedicationStatements(fhir.ResourcesForPatientUrl(fhirEndpointUrl, patientId, "MedicationStatement"), ts)
 	if err != nil {
