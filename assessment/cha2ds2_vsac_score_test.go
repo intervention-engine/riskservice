@@ -24,8 +24,8 @@ var _ = Suite(&CHADSSuite{})
 
 func (cs *CHADSSuite) SetUpSuite(c *C) {
 	data, err := os.Open("fixtures/condition_bundle.json")
-	defer data.Close()
 	util.CheckErr(err)
+	defer data.Close()
 	buf := new(bytes.Buffer)
 	buf.ReadFrom(data)
 	jsonString := buf.String()

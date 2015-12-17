@@ -17,10 +17,10 @@ func GetCountForPatientResources(fhirEndpointUrl, resource, patientId string) (i
 
 func GetCount(fullFhirUrl string) (int, error) {
 	resp, err := http.Get(fullFhirUrl)
-	defer resp.Body.Close()
 	if err != nil {
 		return 0, errors.New(fmt.Sprintf("Could not get: %s", fullFhirUrl))
 	}
+	defer resp.Body.Close()
 	decoder := json.NewDecoder(resp.Body)
 	bundle := &models.Bundle{}
 	err = decoder.Decode(bundle)
@@ -33,10 +33,10 @@ func GetCount(fullFhirUrl string) (int, error) {
 
 func GetPatientConditions(fullFhirUrl string, ts time.Time) ([]*models.Condition, error) {
 	resp, err := http.Get(fullFhirUrl)
-	defer resp.Body.Close()
 	if err != nil {
 		return nil, errors.New(fmt.Sprintf("Could not get: %s", fullFhirUrl))
 	}
+	defer resp.Body.Close()
 	decoder := json.NewDecoder(resp.Body)
 	bundle := &models.Bundle{}
 	err = decoder.Decode(bundle)
@@ -68,10 +68,10 @@ func getConditionStart(c *models.Condition) *models.FHIRDateTime {
 
 func GetPatientMedicationStatements(fullFhirUrl string, ts time.Time) ([]*models.MedicationStatement, error) {
 	resp, err := http.Get(fullFhirUrl)
-	defer resp.Body.Close()
 	if err != nil {
 		return nil, errors.New(fmt.Sprintf("Could not get: %s", fullFhirUrl))
 	}
+	defer resp.Body.Close()
 	decoder := json.NewDecoder(resp.Body)
 	bundle := &models.Bundle{}
 	err = decoder.Decode(bundle)
@@ -102,10 +102,10 @@ func getMedicationStatementStart(med *models.MedicationStatement) *models.FHIRDa
 
 func GetPatient(fullFhirUrl string) (*models.Patient, error) {
 	resp, err := http.Get(fullFhirUrl)
-	defer resp.Body.Close()
 	if err != nil {
 		return nil, errors.New(fmt.Sprintf("Could not get: %s", fullFhirUrl))
 	}
+	defer resp.Body.Close()
 	decoder := json.NewDecoder(resp.Body)
 	patient := &models.Patient{}
 	err = decoder.Decode(patient)
