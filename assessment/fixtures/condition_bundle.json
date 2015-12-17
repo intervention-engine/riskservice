@@ -15,7 +15,8 @@
             }
           ],
           "text": "Diagnosis, Active: Hypertension"
-        }
+        },
+        "verificationStatus": "confirmed"
       }
     },
     {
@@ -30,7 +31,8 @@
             }
           ],
           "text": "Diagnosis, Active: Major Depression"
-        }
+        },
+        "verificationStatus": "confirmed"
       }
     },
     {
@@ -45,7 +47,24 @@
             }
           ],
           "text": "Diagnosis, Active: Stroke"
-        }
+        },
+        "verificationStatus": "confirmed"
+      }
+    },
+    {
+      "id": "554bc3fda749dcd47b000006",
+      "resource": {
+        "resourceType": "Condition",
+        "code": {
+          "coding": [
+            {
+              "system": "http://hl7.org/fhir/sid/icd-9",
+              "code": "443.9"
+            }
+          ],
+          "text": "Diagnosis, Active: Peripheral Artery Disease"
+        },
+        "verificationStatus": "refuted"
       }
     }
   ]

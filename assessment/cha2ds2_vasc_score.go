@@ -102,9 +102,11 @@ func CalculateConditionPortion(patientConditions []*models.Condition, pie *Pie) 
 
 func FuzzyFindInConditions(codeStart, codeSystem string, conditions []*models.Condition) bool {
 	for _, condition := range conditions {
-		for _, coding := range condition.Code.Coding {
-			if strings.HasPrefix(coding.Code, codeStart) && coding.System == codeSystem {
-				return true
+		if condition.VerificationStatus == "confirmed" {
+			for _, coding := range condition.Code.Coding {
+				if strings.HasPrefix(coding.Code, codeStart) && coding.System == codeSystem {
+					return true
+				}
 			}
 		}
 	}
