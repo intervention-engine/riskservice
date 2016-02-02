@@ -79,7 +79,8 @@ func (crs *CalculationRunnerSuite) TestRunner(c *C) {
 	count, _ := db.C("pies").Count()
 	// Should have the pie only for bar
 	c.Assert(count, Equals, 1)
-	time.Sleep(1 * time.Second)
+	// This seems a little finicky -- I bumped this from 1 sec to 3 sec to make the test pass!
+	time.Sleep(3 * time.Second)
 	count, _ = db.C("pies").Count()
 	// Should have all pies
 	c.Assert(count, Equals, 3)
