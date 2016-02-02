@@ -1,6 +1,7 @@
 {
   "id": "55b7a4a51cd462bf29000001",
-  "resourceType": "searchset",
+  "resourceType": "Bundle",
+  "type": "searchset",
   "total": 3,
   "entry": [
     {
