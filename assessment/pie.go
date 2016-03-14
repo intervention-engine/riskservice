@@ -1,8 +1,9 @@
 package assessment
 
 import (
-	"gopkg.in/mgo.v2/bson"
 	"time"
+
+	"gopkg.in/mgo.v2/bson"
 )
 
 // Structs in here represent the chart in Intervention
@@ -32,10 +33,34 @@ func NewPie(patientUrl string) *Pie {
 	return pie
 }
 
+func (p *Pie) Clone() *Pie {
+	cloned := *p
+	cloned.Slices = make([]Slice, len(p.Slices))
+	copy(cloned.Slices, p.Slices)
+	return &cloned
+}
+
 func (p *Pie) AddSlice(name string, weight int, value ...int) {
 	slice := Slice{Name: name, Weight: weight, Value: value[0]}
 	if len(value) == 2 {
 		slice.MaxValue = value[1]
 	}
 	p.Slices = append(p.Slices, slice)
+}
+
+func (p *Pie) UpdateSliceValue(name string, value int) {
+	for i := range p.Slices {
+		if p.Slices[i].Name == name {
+			p.Slices[i].Value = value
+			return
+		}
+	}
+}
+
+func (p *Pie) TotalValues() int {
+	total := 0
+	for i := range p.Slices {
+		total += p.Slices[i].Value
+	}
+	return total
 }
