@@ -44,12 +44,10 @@ func (s *ServerSuite) TestRegisterRiskHandlers(c *C) {
 	pie := assessment.NewPie(patientUrl)
 	db.C("pies").Insert(pie)
 	pieUrl := fmt.Sprintf("%s/pies/%s", server.URL, pie.Id.Hex())
-	fmt.Println(pieUrl)
 	resp, err := http.Get(pieUrl)
 	util.CheckErr(err)
 	buf := new(bytes.Buffer)
 	buf.ReadFrom(resp.Body)
 	responseBody := buf.String()
-	fmt.Println(responseBody)
 	c.Assert(strings.Contains(responseBody, patientUrl), Equals, true)
 }

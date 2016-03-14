@@ -7,50 +7,42 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
+	"sort"
 
 	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 
 	"github.com/intervention-engine/fhir/models"
+	"github.com/intervention-engine/riskservice/assessment"
 	"github.com/intervention-engine/riskservice/plugin"
 )
 
+// RiskService is a container for risk service plugins that can handle the details of getting data needed for the
+// plugins, invoking the calculations on the plugins, posting the new results back to the FHIR server, and saving
+// the risk pies to the database.
 type RiskService struct {
 	plugins []plugin.RiskServicePlugin
 	db      *mgo.Database
 }
 
+// NewRiskService creates a new risk service backed by the passed in MongoDB instance
 func NewRiskService(db *mgo.Database) *RiskService {
 	return &RiskService{db: db}
 }
 
+// RegisterPlugin registers a plugin for use by the risk service
 func (rs *RiskService) RegisterPlugin(plugin plugin.RiskServicePlugin) {
 	rs.plugins = append(rs.plugins, plugin)
 }
 
-func (rs *RiskService) Calculate(patientId string, fhirEndpoint url.URL, basisPieURL url.URL) error {
-	// Build up the query by finding all the resources we must _revinclude
-	revIncludeMap := make(map[string]string)
-	for _, p := range rs.plugins {
-		for _, resource := range p.Config().RequiredResourceTypes {
-			switch resource {
-			default:
-				return fmt.Errorf("Unsupported required resource type: %s", resource)
-			case "Condition", "MedicationStatement":
-				revIncludeMap[resource] = "patient"
-			}
-		}
-	}
-	queryURL, err := url.Parse(fhirEndpoint.String() + "/Patient")
+// Calculate invokes the register plugins to calculate scores for the given patient and post them back to FHIR.
+// This deletes all previous risk assessment instances for the patient and replaces them with new instances.
+func (rs *RiskService) Calculate(patientID string, fhirEndpoint url.URL, basisPieURL url.URL) error {
+	// Get and post the query to retrieve all of the data needed by the risk service plugins
+	queryURL, err := rs.getRequiredDataQueryURL(patientID, fhirEndpoint)
 	if err != nil {
 		return err
 	}
-	queryURL.Query().Set("id", patientId)
-	for resource, property := range revIncludeMap {
-		queryURL.Query().Add("_revinclude", fmt.Sprintf("%s:%s", resource, property))
-	}
-
-	// Issue the query and decode into a bundle
 	response, err := http.Get(queryURL.String())
 	if err != nil {
 		return err
@@ -61,7 +53,7 @@ func (rs *RiskService) Calculate(patientId string, fhirEndpoint url.URL, basisPi
 		return err
 	}
 
-	// Convert the bundle into an EventStream
+	// Convert the data bundle into an EventStream
 	es, err := plugin.BundleToEventStream(bundle)
 	if err != nil {
 		return err
@@ -69,48 +61,42 @@ func (rs *RiskService) Calculate(patientId string, fhirEndpoint url.URL, basisPi
 
 	// Now do the calculations for each plugin
 	for _, p := range rs.plugins {
+
+		if len(p.Config().Method.Coding) == 0 {
+			return errors.New("Risk Assessment Plugins MUST provide a method with a coding")
+		}
+
 		results, err := p.Calculate(es)
 		if err != nil {
-			return err
+			if _, ok := err.(plugin.NotApplicableError); ok {
+				continue
+			} else {
+				return err
+			}
 		}
-
-		// TODO: sort these results by date
-
-		diff, err := rs.CalculateRiskDiff(patientId, p.Config().Method, results, fhirEndpoint)
-		if err != nil {
-			return err
-		}
+		results = sortAndConsolidate(results)
 
 		// Build up the bundle with risk assessments to delete and add
-		diffBundle := &models.Bundle{}
-		diffBundle.Type = "transaction"
-		diffBundle.Entry = make([]models.BundleEntryComponent, len(diff.RiskAssessmentsToDelete)+len(diff.RiskCalculationsToAdd))
-		for i := range diff.RiskAssessmentsToDelete {
-			diffBundle.Entry[i].Request = &models.BundleEntryRequestComponent{
-				Method: "DELETE",
-				Url:    "RiskAssessment/" + diff.RiskAssessmentsToDelete[i].Id,
-			}
-		}
-		for i := range diff.RiskCalculationsToAdd {
-			j := i + len(diff.RiskAssessmentsToDelete)
-			diffBundle.Entry[j].Request = &models.BundleEntryRequestComponent{
-				Method: "POST",
-				Url:    "RiskAssessment",
-			}
-			diffBundle.Entry[j].Resource = diff.RiskCalculationsToAdd[i].ToRiskAssessment(patientId, basisPieURL, p.Config())
-		}
+		raBundle := buildRiskAssessmentBundle(patientID, results, basisPieURL, p)
 
-		// Store the new pies
+		// Store the new pies along with their method (to identify by patient and method)
 		pieCollection := rs.db.C("pies")
-		for i := range diff.RiskCalculationsToAdd {
-			err = pieCollection.Insert(diff.RiskCalculationsToAdd[i].Pie)
-			if err != nil {
+		for i := range results {
+			method := p.Config().Method
+			pieWithMethod := struct {
+				assessment.Pie `bson:",inline"`
+				Method         *models.CodeableConcept `bson:"method"`
+			}{
+				*results[i].Pie,
+				&method,
+			}
+			if err = pieCollection.Insert(&pieWithMethod); err != nil {
 				return err
 			}
 		}
 
-		// Submit the bundle of assessments to delete and/or add
-		data, err := json.Marshal(diffBundle)
+		// Submit the risk assessment bundle
+		data, err := json.Marshal(raBundle)
 		if err != nil {
 			return err
 		}
@@ -125,100 +111,99 @@ func (rs *RiskService) Calculate(patientId string, fhirEndpoint url.URL, basisPi
 		}
 
 		// Delete the old pies
-		for i := range diff.RiskAssessmentsToDelete {
-			ra := diff.RiskAssessmentsToDelete[i]
-			for _, ref := range ra.Basis {
-				if strings.HasPrefix(ref.Reference, basisPieURL.String()+"/") {
-					pieID := strings.TrimPrefix(ref.Reference, basisPieURL.String()+"/")
-					pieCollection.RemoveId(pieID)
-				}
-			}
-		}
+		method := p.Config().Method.Coding[0]
+		pieCollection.RemoveAll(bson.M{
+			"patient":       patientID,
+			"method.coding": bson.M{"$elemMatch": bson.M{"system": method.System, "code": method.Code}},
+		})
 	}
 
 	return nil
 }
 
-func (rs *RiskService) CalculateRiskDiff(patientId string, method models.CodeableConcept, results []plugin.RiskServiceCalculationResult, fhirEndpoint url.URL) (*RiskDiff, error) {
-	// Build up the query for existing risk assessments
-	raURL, err := url.Parse(fhirEndpoint.String() + "/RiskAssessment")
-	if err != nil {
-		return nil, err
+// getRiskAssessmentDeleteURL constructs the URL to use for identifying all risk assessments for a given patient
+// using a given method.  This is used to delete the old set of assessments before adding the new set.
+func (rs *RiskService) getRequiredDataQueryURL(patientID string, fhirEndpoint url.URL) (queryURL *url.URL, err error) {
+	// Build up the query by finding all the resources we must _revinclude
+	revIncludeMap := make(map[string]string)
+	for _, p := range rs.plugins {
+		for _, resource := range p.Config().RequiredResourceTypes {
+			switch resource {
+			default:
+				err = fmt.Errorf("Unsupported required resource type: %s", resource)
+				return
+			// NOTE: This only supports those resources we currently need in our reference implementation plugins
+			case "Condition", "MedicationStatement":
+				revIncludeMap[resource] = "patient"
+			}
+		}
 	}
-	raURL.Query().Set("patient", patientId)
-	if len(method.Coding) == 0 {
-		return nil, errors.New("No risk assessment method was specified")
+	if queryURL, err = url.Parse(fhirEndpoint.String() + "/Patient"); err == nil {
+		params := url.Values{}
+		params.Set("id", patientID)
+		for resource, property := range revIncludeMap {
+			params.Add("_revinclude", fmt.Sprintf("%s:%s", resource, property))
+		}
+		queryURL.RawQuery = params.Encode()
 	}
-	raURL.Query().Set("method", method.Coding[0].System+"|"+method.Coding[0].Code)
-	raURL.Query().Set("_count", "10000") // TODO: Support paging?
+	return
+}
 
-	// Get the bundle of existing risk assessments
-	response, err := http.Get(raURL.String())
-	if err != nil {
-		return nil, err
-	}
-	defer response.Body.Close()
+func buildRiskAssessmentBundle(patientID string, results []plugin.RiskServiceCalculationResult, basisPieURL url.URL, p plugin.RiskServicePlugin) *models.Bundle {
 	raBundle := &models.Bundle{}
-	if err = json.NewDecoder(response.Body).Decode(raBundle); err != nil {
-		return nil, err
+	raBundle.Type = "transaction"
+	raBundle.Entry = make([]models.BundleEntryComponent, len(results)+1)
+	raBundle.Entry[0].Request = &models.BundleEntryRequestComponent{
+		Method: "DELETE",
+		Url:    getRiskAssessmentDeleteURL(p.Config().Method, patientID),
 	}
-
-	diff := RiskDiff{}
-
-	// Iterate through the bundle, finding entries that need to be deleted and marking entries that are found
-	foundResults := make([]bool, len(results))
-	for i := range raBundle.Entry {
-		if ra, ok := raBundle.Entry[i].Resource.(*models.RiskAssessment); ok {
-			date := ra.Date.Time
-			var score *float64
-			if len(ra.Prediction) > 0 {
-				score = ra.Prediction[0].ProbabilityDecimal
-			}
-
-			var found bool
-			for j := range results {
-				var last bool
-				if (j + 1) == len(results) {
-					last = true
-				}
-				result := results[j]
-				if result.AsOf.Unix() == date.Unix() && result.GetProbabilityDecimalOrScore() == score {
-					if isTaggedMostRecent(ra) != last {
-						// Although they are the same, they don't agree on whether they are MOST_RECENT, so don't mark them found!
-						break
-					}
-					found = true
-					foundResults[j] = true
-					break
-				}
-			}
-
-			if !found {
-				diff.RiskAssessmentsToDelete = append(diff.RiskAssessmentsToDelete)
+	for i := range results {
+		raBundle.Entry[i+1].Request = &models.BundleEntryRequestComponent{
+			Method: "POST",
+			Url:    "RiskAssessment",
+		}
+		ra := results[i].ToRiskAssessment(patientID, basisPieURL, p.Config())
+		if (i + 1) == len(results) {
+			ra.Meta = &models.Meta{
+				Tag: []models.Coding{{System: "http://interventionengine.org/tags/", Code: "MOST_RECENT"}},
 			}
 		}
+		raBundle.Entry[i+1].Resource = ra
 	}
-
-	// Find the result calculations that weren't found and therefore need to be added
-	for i := range foundResults {
-		if !foundResults[i] {
-			diff.RiskCalculationsToAdd = append(diff.RiskCalculationsToAdd, results[i])
-		}
-	}
-
-	return &diff, nil
+	return raBundle
 }
 
-type RiskDiff struct {
-	RiskCalculationsToAdd   []plugin.RiskServiceCalculationResult
-	RiskAssessmentsToDelete []models.RiskAssessment
+// getRiskAssessmentDeleteURL constructs the URL to use for identifying all risk assessments for a given patient
+// using a given method.  This is used to delete the old set of assessments before adding the new set.
+func getRiskAssessmentDeleteURL(concept models.CodeableConcept, patientID string) string {
+	params := url.Values{}
+	params.Set("method", fmt.Sprintf("%s|%s", concept.Coding[0].System, concept.Coding[0].Code))
+	params.Set("patient", patientID)
+	return fmt.Sprintf("RiskAssessment?%s", params.Encode())
 }
 
-func isTaggedMostRecent(ra *models.RiskAssessment) bool {
-	for _, tag := range ra.Meta.Tag {
-		if tag.Code == "MOST_RECENT" && tag.System == "http://interventionengine.org/tags/" {
-			return true
+// sortAndConsolidate sorts calculations by date and then consolidates the ones that have the same timestamp into one,
+// choosing whichever was last in the original order
+func sortAndConsolidate(results []plugin.RiskServiceCalculationResult) []plugin.RiskServiceCalculationResult {
+	// Use stable sort to retain original order on equal elements
+	sort.Stable(byAsOfDate(results))
+	for i := 0; i < len(results); i++ {
+		if i > 0 && results[i].AsOf.Equal(results[i-1].AsOf) {
+			results = append(results[:(i-1)], results[i:]...)
+			i--
 		}
 	}
-	return false
+	return results
+}
+
+type byAsOfDate []plugin.RiskServiceCalculationResult
+
+func (d byAsOfDate) Len() int {
+	return len(d)
+}
+func (d byAsOfDate) Swap(i, j int) {
+	d[i], d[j] = d[j], d[i]
+}
+func (d byAsOfDate) Less(i, j int) bool {
+	return d[i].AsOf.Before(d[j].AsOf)
 }
