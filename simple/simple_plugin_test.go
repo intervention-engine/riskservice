@@ -10,7 +10,8 @@ import (
 )
 
 type SimplePluginSuite struct {
-	Plugin *SimplePlugin
+	Plugin          *SimplePlugin
+	FHIREndpointURL string
 }
 
 func Test(t *testing.T) { TestingT(t) }
@@ -19,6 +20,7 @@ var _ = Suite(&SimplePluginSuite{})
 
 func (cs *SimplePluginSuite) SetUpSuite(c *C) {
 	cs.Plugin = &SimplePlugin{}
+	cs.FHIREndpointURL = "http://example.org/fhir"
 }
 
 func (cs *SimplePluginSuite) TearDownSuite(c *C) {
@@ -30,7 +32,7 @@ func (cs *SimplePluginSuite) TestPatientWithNoConditionsAndNoMeds(c *C) {
 	patient := &models.Patient{Gender: "female", BirthDate: birthDate}
 	patient.Id = "1223"
 	es := plugin.NewEventStream(patient)
-	results, err := cs.Plugin.Calculate(es)
+	results, err := cs.Plugin.Calculate(es, cs.FHIREndpointURL)
 	c.Assert(err, IsNil)
 	// We expect one result with an asof time of now(ish)
 	c.Assert(results, HasLen, 1)
@@ -46,9 +48,9 @@ func (cs *SimplePluginSuite) TestPatientWithSomeConditionsAndNoMeds(c *C) {
 	patient := &models.Patient{Gender: "female", BirthDate: birthDate}
 	patient.Id = "1223"
 	es := plugin.NewEventStream(patient)
-	es.AddEvent(conditionEvent("1", "Atrial Fibrillation", "427.31", time.Date(2010, time.February, 15, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(conditionEvent("2", "Hypertension", "401.0", time.Date(2015, time.April, 15, 15, 0, 0, 0, time.UTC)))
-	results, err := cs.Plugin.Calculate(es)
+	es.Events = append(es.Events, conditionEvent("1", "Atrial Fibrillation", "427.31", time.Date(2010, time.February, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, conditionEvent("2", "Hypertension", "401.0", time.Date(2015, time.April, 15, 15, 0, 0, 0, time.UTC)))
+	results, err := cs.Plugin.Calculate(es, cs.FHIREndpointURL)
 	c.Assert(err, IsNil)
 	c.Assert(results, HasLen, 2)
 	cs.assertResult(c, results[0], time.Date(2010, time.February, 15, 15, 0, 0, 0, time.UTC), 1, "1223", 1, 0)
@@ -60,9 +62,9 @@ func (cs *SimplePluginSuite) TestPatientWithNoConditionsAndSomeMeds(c *C) {
 	patient := &models.Patient{Gender: "female", BirthDate: birthDate}
 	patient.Id = "1223"
 	es := plugin.NewEventStream(patient)
-	es.AddEvent(medicationEvent("1", "Aspirin", "1191", time.Date(2010, time.April, 15, 15, 30, 0, 0, time.UTC)))
-	es.AddEvent(medicationEvent("2", "Lisinopril", "104377", time.Date(2015, time.April, 15, 15, 30, 0, 0, time.UTC)))
-	results, err := cs.Plugin.Calculate(es)
+	es.Events = append(es.Events, medicationEvent("1", "Aspirin", "1191", time.Date(2010, time.April, 15, 15, 30, 0, 0, time.UTC)))
+	es.Events = append(es.Events, medicationEvent("2", "Lisinopril", "104377", time.Date(2015, time.April, 15, 15, 30, 0, 0, time.UTC)))
+	results, err := cs.Plugin.Calculate(es, cs.FHIREndpointURL)
 	c.Assert(err, IsNil)
 	c.Assert(results, HasLen, 2)
 	cs.assertResult(c, results[0], time.Date(2010, time.April, 15, 15, 30, 0, 0, time.UTC), 1, "1223", 0, 1)
@@ -74,11 +76,11 @@ func (cs *SimplePluginSuite) TestPatientWithSomeConditionsAndSomeMeds(c *C) {
 	patient := &models.Patient{Gender: "female", BirthDate: birthDate}
 	patient.Id = "1223"
 	es := plugin.NewEventStream(patient)
-	es.AddEvent(conditionEvent("1", "Atrial Fibrillation", "427.31", time.Date(2010, time.February, 15, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(medicationEvent("2", "Aspirin", "1191", time.Date(2010, time.February, 15, 15, 30, 0, 0, time.UTC)))
-	es.AddEvent(conditionEvent("3", "Hypertension", "401.0", time.Date(2015, time.April, 15, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(medicationEvent("4", "Lisinopril", "104377", time.Date(2015, time.April, 15, 15, 30, 0, 0, time.UTC)))
-	results, err := cs.Plugin.Calculate(es)
+	es.Events = append(es.Events, conditionEvent("1", "Atrial Fibrillation", "427.31", time.Date(2010, time.February, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, medicationEvent("2", "Aspirin", "1191", time.Date(2010, time.February, 15, 15, 30, 0, 0, time.UTC)))
+	es.Events = append(es.Events, conditionEvent("3", "Hypertension", "401.0", time.Date(2015, time.April, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, medicationEvent("4", "Lisinopril", "104377", time.Date(2015, time.April, 15, 15, 30, 0, 0, time.UTC)))
+	results, err := cs.Plugin.Calculate(es, cs.FHIREndpointURL)
 	c.Assert(err, IsNil)
 	c.Assert(results, HasLen, 4)
 	cs.assertResult(c, results[0], time.Date(2010, time.February, 15, 15, 0, 0, 0, time.UTC), 1, "1223", 1, 0)
@@ -94,13 +96,13 @@ func (cs *SimplePluginSuite) TestPatientWithEndingConditionsAndEndingMeds(c *C) 
 	es := plugin.NewEventStream(patient)
 	afibStart, afibEnd := conditionStartAndEndEvents("1", "Atrial Fibrillation", "427.31", time.Date(2010, time.February, 15, 15, 0, 0, 0, time.UTC), time.Date(2015, time.May, 15, 15, 0, 0, 0, time.UTC))
 	aspirinStart, aspirinEnd := medicationStartAndEndEvents("2", "Aspirin", "1191", time.Date(2010, time.February, 15, 15, 30, 0, 0, time.UTC), time.Date(2015, time.May, 15, 15, 30, 0, 0, time.UTC))
-	es.AddEvent(afibStart)
-	es.AddEvent(aspirinStart)
-	es.AddEvent(conditionEvent("3", "Hypertension", "401.0", time.Date(2015, time.April, 15, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(medicationEvent("4", "Lisinopril", "104377", time.Date(2015, time.April, 15, 15, 30, 0, 0, time.UTC)))
-	es.AddEvent(afibEnd)
-	es.AddEvent(aspirinEnd)
-	results, err := cs.Plugin.Calculate(es)
+	es.Events = append(es.Events, afibStart)
+	es.Events = append(es.Events, aspirinStart)
+	es.Events = append(es.Events, conditionEvent("3", "Hypertension", "401.0", time.Date(2015, time.April, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, medicationEvent("4", "Lisinopril", "104377", time.Date(2015, time.April, 15, 15, 30, 0, 0, time.UTC)))
+	es.Events = append(es.Events, afibEnd)
+	es.Events = append(es.Events, aspirinEnd)
+	results, err := cs.Plugin.Calculate(es, cs.FHIREndpointURL)
 	c.Assert(err, IsNil)
 	c.Assert(results, HasLen, 6)
 	cs.assertResult(c, results[0], time.Date(2010, time.February, 15, 15, 0, 0, 0, time.UTC), 1, "1223", 1, 0)
@@ -116,14 +118,14 @@ func (cs *SimplePluginSuite) TestPatientWithDuplicates(c *C) {
 	patient := &models.Patient{Gender: "female", BirthDate: birthDate}
 	patient.Id = "1223"
 	es := plugin.NewEventStream(patient)
-	es.AddEvent(conditionEvent("1", "Atrial Fibrillation", "427.31", time.Date(2010, time.February, 15, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(medicationEvent("2", "Aspirin", "1191", time.Date(2010, time.February, 15, 15, 30, 0, 0, time.UTC)))
-	es.AddEvent(conditionEvent("3", "Hypertension", "401.0", time.Date(2015, time.April, 15, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(medicationEvent("4", "Lisinopril", "104377", time.Date(2015, time.April, 15, 15, 30, 0, 0, time.UTC)))
-	es.AddEvent(conditionEvent("5", "Hypertension", "401.0", time.Date(2015, time.May, 1, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(medicationEvent("6", "Lisinopril", "104377", time.Date(2015, time.May, 1, 15, 30, 0, 0, time.UTC)))
+	es.Events = append(es.Events, conditionEvent("1", "Atrial Fibrillation", "427.31", time.Date(2010, time.February, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, medicationEvent("2", "Aspirin", "1191", time.Date(2010, time.February, 15, 15, 30, 0, 0, time.UTC)))
+	es.Events = append(es.Events, conditionEvent("3", "Hypertension", "401.0", time.Date(2015, time.April, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, medicationEvent("4", "Lisinopril", "104377", time.Date(2015, time.April, 15, 15, 30, 0, 0, time.UTC)))
+	es.Events = append(es.Events, conditionEvent("5", "Hypertension", "401.0", time.Date(2015, time.May, 1, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, medicationEvent("6", "Lisinopril", "104377", time.Date(2015, time.May, 1, 15, 30, 0, 0, time.UTC)))
 
-	results, err := cs.Plugin.Calculate(es)
+	results, err := cs.Plugin.Calculate(es, cs.FHIREndpointURL)
 	c.Assert(err, IsNil)
 	c.Assert(results, HasLen, 6)
 	cs.assertResult(c, results[0], time.Date(2010, time.February, 15, 15, 0, 0, 0, time.UTC), 1, "1223", 1, 0)
@@ -139,15 +141,15 @@ func (cs *SimplePluginSuite) TestNonSignificantEvents(c *C) {
 	patient := &models.Patient{Gender: "female", BirthDate: birthDate}
 	patient.Id = "1223"
 	es := plugin.NewEventStream(patient)
-	es.AddEvent(conditionEvent("1", "Atrial Fibrillation", "427.31", time.Date(2010, time.February, 15, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(medicationEvent("2", "Aspirin", "1191", time.Date(2010, time.February, 15, 15, 30, 0, 0, time.UTC)))
-	es.AddEvent(encounterEvent("3", "Consultation", "11429006", time.Date(2012, time.March, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, conditionEvent("1", "Atrial Fibrillation", "427.31", time.Date(2010, time.February, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, medicationEvent("2", "Aspirin", "1191", time.Date(2010, time.February, 15, 15, 30, 0, 0, time.UTC)))
+	es.Events = append(es.Events, encounterEvent("3", "Consultation", "11429006", time.Date(2012, time.March, 15, 15, 0, 0, 0, time.UTC)))
 	weightFloat := float64(163)
 	weight := models.Quantity{Value: &weightFloat, Unit: "lb_av"}
-	es.AddEvent(observationEvent("4", "Body Weight", "29463-7", weight, time.Date(2012, time.March, 15, 15, 30, 0, 0, time.UTC)))
-	es.AddEvent(conditionEvent("5", "Hypertension", "401.0", time.Date(2015, time.April, 15, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(medicationEvent("6", "Lisinopril", "104377", time.Date(2015, time.April, 15, 15, 30, 0, 0, time.UTC)))
-	results, err := cs.Plugin.Calculate(es)
+	es.Events = append(es.Events, observationEvent("4", "Body Weight", "29463-7", weight, time.Date(2012, time.March, 15, 15, 30, 0, 0, time.UTC)))
+	es.Events = append(es.Events, conditionEvent("5", "Hypertension", "401.0", time.Date(2015, time.April, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, medicationEvent("6", "Lisinopril", "104377", time.Date(2015, time.April, 15, 15, 30, 0, 0, time.UTC)))
+	results, err := cs.Plugin.Calculate(es, cs.FHIREndpointURL)
 	c.Assert(err, IsNil)
 	c.Assert(results, HasLen, 4)
 	cs.assertResult(c, results[0], time.Date(2010, time.February, 15, 15, 0, 0, 0, time.UTC), 1, "1223", 1, 0)
@@ -161,7 +163,7 @@ func (cs *SimplePluginSuite) assertResult(c *C, result plugin.RiskServiceCalcula
 	c.Assert(*result.Score, Equals, score)
 	c.Assert(result.ProbabilityDecimal, IsNil)
 	pie := result.Pie
-	c.Assert(pie.Patient, Equals, "Patient/"+patientID)
+	c.Assert(pie.Patient, Equals, cs.FHIREndpointURL+"/Patient/"+patientID)
 	c.Assert(pie.Slices, HasLen, 2)
 	c.Assert(pie.Slices[0].Name, Equals, "Conditions")
 	c.Assert(pie.Slices[0].Weight, Equals, 50)
@@ -174,7 +176,7 @@ func (cs *SimplePluginSuite) assertResult(c *C, result plugin.RiskServiceCalcula
 }
 
 func conditionEvent(id, name, icd9Code string, onset time.Time) plugin.Event {
-	var condition models.Condition
+	condition := new(models.Condition)
 	condition.Id = id
 	condition.Code = &models.CodeableConcept{
 		Coding: []models.Coding{
@@ -186,16 +188,16 @@ func conditionEvent(id, name, icd9Code string, onset time.Time) plugin.Event {
 	condition.VerificationStatus = "confirmed"
 
 	return plugin.Event{
-		Date:     onset,
-		Type:     "Condition",
-		End:      false,
-		Resource: condition,
+		Date:  onset,
+		Type:  "Condition",
+		End:   false,
+		Value: condition,
 	}
 }
 
 func conditionStartAndEndEvents(id, name, icd9Code string, onset time.Time, abatement time.Time) (plugin.Event, plugin.Event) {
 	start := conditionEvent(id, name, icd9Code, onset)
-	condition := start.Resource.(models.Condition)
+	condition := start.Value.(*models.Condition)
 	condition.AbatementDateTime = &models.FHIRDateTime{Time: abatement, Precision: models.Timestamp}
 	end := start
 	end.Date = abatement
@@ -204,7 +206,7 @@ func conditionStartAndEndEvents(id, name, icd9Code string, onset time.Time, abat
 }
 
 func medicationEvent(id, name, rxNormCode string, activeDateTime time.Time) plugin.Event {
-	var medication models.MedicationStatement
+	medication := new(models.MedicationStatement)
 	medication.Id = id
 	medication.MedicationCodeableConcept = &models.CodeableConcept{
 		Coding: []models.Coding{
@@ -218,16 +220,16 @@ func medicationEvent(id, name, rxNormCode string, activeDateTime time.Time) plug
 	medication.Status = "active"
 
 	return plugin.Event{
-		Date:     activeDateTime,
-		Type:     "Medication",
-		End:      false,
-		Resource: medication,
+		Date:  activeDateTime,
+		Type:  "Medication",
+		End:   false,
+		Value: medication,
 	}
 }
 
 func medicationStartAndEndEvents(id, name, rxNormCode string, active time.Time, inactive time.Time) (plugin.Event, plugin.Event) {
 	start := medicationEvent(id, name, rxNormCode, active)
-	medication := start.Resource.(models.MedicationStatement)
+	medication := start.Value.(*models.MedicationStatement)
 	medication.EffectivePeriod.End = &models.FHIRDateTime{Time: inactive, Precision: models.Timestamp}
 	end := start
 	end.Date = inactive
@@ -236,7 +238,7 @@ func medicationStartAndEndEvents(id, name, rxNormCode string, active time.Time, 
 }
 
 func observationEvent(id, name, loincCode string, value models.Quantity, effective time.Time) plugin.Event {
-	var observation models.Observation
+	observation := new(models.Observation)
 	observation.Id = id
 	observation.Code = &models.CodeableConcept{
 		Coding: []models.Coding{
@@ -249,15 +251,15 @@ func observationEvent(id, name, loincCode string, value models.Quantity, effecti
 	observation.Status = "final"
 
 	return plugin.Event{
-		Date:     effective,
-		Type:     "Observation",
-		End:      false,
-		Resource: observation,
+		Date:  effective,
+		Type:  "Observation",
+		End:   false,
+		Value: observation,
 	}
 }
 
 func encounterEvent(id, name, snomedCode string, start time.Time) plugin.Event {
-	var encounter models.Encounter
+	encounter := new(models.Encounter)
 	encounter.Id = id
 	encounter.Type = []models.CodeableConcept{
 		{
@@ -273,9 +275,9 @@ func encounterEvent(id, name, snomedCode string, start time.Time) plugin.Event {
 	encounter.Status = "finished"
 
 	return plugin.Event{
-		Date:     start,
-		Type:     "Encounter",
-		End:      false,
-		Resource: encounter,
+		Date:  start,
+		Type:  "Encounter",
+		End:   false,
+		Value: encounter,
 	}
 }

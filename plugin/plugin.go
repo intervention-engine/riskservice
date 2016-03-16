@@ -1,7 +1,7 @@
 package plugin
 
 import (
-	"net/url"
+	"sort"
 	"time"
 
 	"github.com/intervention-engine/fhir/models"
@@ -10,7 +10,7 @@ import (
 
 type RiskServicePlugin interface {
 	Config() RiskServicePluginConfig
-	Calculate(es *EventStream) ([]RiskServiceCalculationResult, error)
+	Calculate(es *EventStream, fhirEndpointURL string) ([]RiskServiceCalculationResult, error)
 }
 
 type RiskServicePluginConfig struct {
@@ -41,7 +41,7 @@ func (r *RiskServiceCalculationResult) GetProbabilityDecimalOrScore() *float64 {
 	return nil
 }
 
-func (r *RiskServiceCalculationResult) ToRiskAssessment(patientId string, basisPieURL url.URL, config RiskServicePluginConfig) *models.RiskAssessment {
+func (r *RiskServiceCalculationResult) ToRiskAssessment(patientId string, basisPieURL string, config RiskServicePluginConfig) *models.RiskAssessment {
 	return &models.RiskAssessment{
 		Subject: &models.Reference{Reference: "Patient/" + patientId},
 		Method:  &config.Method,
@@ -53,9 +53,27 @@ func (r *RiskServiceCalculationResult) ToRiskAssessment(patientId string, basisP
 			},
 		},
 		Basis: []models.Reference{
-			{Reference: basisPieURL.String() + "/" + r.Pie.Id.Hex()},
+			{Reference: basisPieURL + "/" + r.Pie.Id.Hex()},
 		},
 	}
+}
+
+// SortResultsByAsOfDate sorts the results by their as-of date
+func SortResultsByAsOfDate(results []RiskServiceCalculationResult) {
+	// Stable sort to preserve original order when dates are the same
+	sort.Stable(byAsOfDate(results))
+}
+
+type byAsOfDate []RiskServiceCalculationResult
+
+func (d byAsOfDate) Len() int {
+	return len(d)
+}
+func (d byAsOfDate) Swap(i, j int) {
+	d[i], d[j] = d[j], d[i]
+}
+func (d byAsOfDate) Less(i, j int) bool {
+	return d[i].AsOf.Before(d[j].AsOf)
 }
 
 type NotApplicableError struct {

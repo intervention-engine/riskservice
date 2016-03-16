@@ -36,7 +36,7 @@ func (c *SimplePlugin) Config() plugin.RiskServicePluginConfig {
 }
 
 // Calculate takes a stream of events and returns a slice of corresponding risk calculation results
-func (c *SimplePlugin) Calculate(es *plugin.EventStream) ([]plugin.RiskServiceCalculationResult, error) {
+func (c *SimplePlugin) Calculate(es *plugin.EventStream, fhirEndpointURL string) ([]plugin.RiskServiceCalculationResult, error) {
 	var results []plugin.RiskServiceCalculationResult
 
 	// Keep a map of active conditions and medications -- so we don't double-count duplicates in the record.
@@ -44,15 +44,15 @@ func (c *SimplePlugin) Calculate(es *plugin.EventStream) ([]plugin.RiskServiceCa
 	mMap := make(map[string]int)
 
 	// Create the initial pie
-	pie := assessment.NewPie("Patient/" + es.Patient.Id)
+	pie := assessment.NewPie(fhirEndpointURL + "/Patient/" + es.Patient.Id)
 	pie.Slices = c.Config().DefaultPieSlices
 
 	// Now go through the event stream, updating the pie
 	for _, event := range es.Events {
 		var isFactor bool
-		pie = pie.Clone()
-		switch r := event.Resource.(type) {
-		case models.Condition:
+		pie = pie.Clone(true)
+		switch r := event.Value.(type) {
+		case *models.Condition:
 			if r.Code == nil || len(r.Code.Coding) == 0 {
 				continue
 			}
@@ -65,7 +65,7 @@ func (c *SimplePlugin) Calculate(es *plugin.EventStream) ([]plugin.RiskServiceCa
 				cMap[key] = count - 1
 			}
 			pie.UpdateSliceValue("Conditions", calculateCount(cMap))
-		case models.MedicationStatement:
+		case *models.MedicationStatement:
 			if r.MedicationCodeableConcept == nil || len(r.MedicationCodeableConcept.Coding) == 0 {
 				continue
 			}

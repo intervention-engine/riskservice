@@ -17,6 +17,11 @@
 			"Rev": "84916746ec090f2a38d1d95d0d32d4608d420fd0"
 		},
 		{
+			"ImportPath": "github.com/intervention-engine/fhir/server",
+			"Comment": "DSTU1-129-g8491674",
+			"Rev": "84916746ec090f2a38d1d95d0d32d4608d420fd0"
+		},
+		{
 			"ImportPath": "github.com/intervention-engine/fhir/upload",
 			"Comment": "DSTU1-129-g8491674",
 			"Rev": "84916746ec090f2a38d1d95d0d32d4608d420fd0"

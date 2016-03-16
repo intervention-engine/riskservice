@@ -10,7 +10,8 @@ import (
 )
 
 type CHA2DS2VAScPluginSuite struct {
-	Plugin *CHA2DS2VAScPlugin
+	Plugin          *CHA2DS2VAScPlugin
+	FHIREndpointURL string
 }
 
 func Test(t *testing.T) { TestingT(t) }
@@ -19,6 +20,7 @@ var _ = Suite(&CHA2DS2VAScPluginSuite{})
 
 func (cs *CHA2DS2VAScPluginSuite) SetUpSuite(c *C) {
 	cs.Plugin = &CHA2DS2VAScPlugin{}
+	cs.FHIREndpointURL = "http://example.org/fhir"
 }
 
 func (cs *CHA2DS2VAScPluginSuite) TearDownSuite(c *C) {
@@ -30,8 +32,8 @@ func (cs *CHA2DS2VAScPluginSuite) TestFemaleWithAFibOnly(c *C) {
 	patient := &models.Patient{Gender: "female", BirthDate: birthDate}
 	patient.Id = "1223"
 	es := plugin.NewEventStream(patient)
-	es.AddEvent(conditionEvent("1", "Atrial Fibrillation", "427.31", time.Date(1990, time.February, 15, 15, 0, 0, 0, time.UTC)))
-	results, err := cs.Plugin.Calculate(es)
+	es.Events = append(es.Events, conditionEvent("1", "Atrial Fibrillation", "427.31", time.Date(1990, time.February, 15, 15, 0, 0, 0, time.UTC)))
+	results, err := cs.Plugin.Calculate(es, cs.FHIREndpointURL)
 	c.Assert(err, IsNil)
 	c.Assert(results, HasLen, 1)
 	cs.assertResult(c, results[0], time.Date(1990, time.February, 15, 15, 0, 0, 0, time.UTC), 1, 1.3, "1223", 0, 0, 0, 0, 0, 0, 1)
@@ -42,8 +44,8 @@ func (cs *CHA2DS2VAScPluginSuite) TestMaleWithAFibOnly(c *C) {
 	patient := &models.Patient{Gender: "male", BirthDate: birthDate}
 	patient.Id = "1223"
 	es := plugin.NewEventStream(patient)
-	es.AddEvent(conditionEvent("1", "Atrial Fibrillation", "427.31", time.Date(1990, time.February, 15, 15, 0, 0, 0, time.UTC)))
-	results, err := cs.Plugin.Calculate(es)
+	es.Events = append(es.Events, conditionEvent("1", "Atrial Fibrillation", "427.31", time.Date(1990, time.February, 15, 15, 0, 0, 0, time.UTC)))
+	results, err := cs.Plugin.Calculate(es, cs.FHIREndpointURL)
 	c.Assert(err, IsNil)
 	c.Assert(results, HasLen, 1)
 	cs.assertResult(c, results[0], time.Date(1990, time.February, 15, 15, 0, 0, 0, time.UTC), 0, 0.0, "1223", 0, 0, 0, 0, 0, 0, 0)
@@ -54,15 +56,15 @@ func (cs *CHA2DS2VAScPluginSuite) TestFemaleWithEveryFactor(c *C) {
 	patient := &models.Patient{Gender: "female", BirthDate: birthDate}
 	patient.Id = "1223"
 	es := plugin.NewEventStream(patient)
-	es.AddEvent(conditionEvent("1", "Atrial Fibrillation", "427.31", time.Date(1990, time.February, 15, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(conditionEvent("2", "Congestive Heart Failure", "428.0", time.Date(1993, time.March, 15, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(conditionEvent("3", "Hypertension", "401.0", time.Date(1997, time.April, 15, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(conditionEvent("4", "Diabetes", "250.0", time.Date(2000, time.May, 15, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(conditionEvent("5", "Stroke", "434.91", time.Date(2004, time.June, 15, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(ageEvent("6", 65, time.Date(2005, time.July, 1, 0, 0, 0, 0, time.UTC)))
-	es.AddEvent(conditionEvent("7", "Vascular Disease", "443.9", time.Date(2007, time.July, 15, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(ageEvent("8", 75, time.Date(2015, time.July, 1, 0, 0, 0, 0, time.UTC)))
-	results, err := cs.Plugin.Calculate(es)
+	es.Events = append(es.Events, conditionEvent("1", "Atrial Fibrillation", "427.31", time.Date(1990, time.February, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, conditionEvent("2", "Congestive Heart Failure", "428.0", time.Date(1993, time.March, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, conditionEvent("3", "Hypertension", "401.0", time.Date(1997, time.April, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, conditionEvent("4", "Diabetes", "250.0", time.Date(2000, time.May, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, conditionEvent("5", "Stroke", "434.91", time.Date(2004, time.June, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, ageEvent("6", 65, time.Date(2005, time.July, 1, 0, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, conditionEvent("7", "Vascular Disease", "443.9", time.Date(2007, time.July, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, ageEvent("8", 75, time.Date(2015, time.July, 1, 0, 0, 0, 0, time.UTC)))
+	results, err := cs.Plugin.Calculate(es, cs.FHIREndpointURL)
 	c.Assert(err, IsNil)
 	c.Assert(results, HasLen, 8)
 	cs.assertResult(c, results[0], time.Date(1990, time.February, 15, 15, 0, 0, 0, time.UTC), 1, 1.3, "1223", 0, 0, 0, 0, 0, 0, 1)
@@ -80,24 +82,24 @@ func (cs *CHA2DS2VAScPluginSuite) TestNonSignificantEvents(c *C) {
 	patient := &models.Patient{Gender: "female", BirthDate: birthDate}
 	patient.Id = "1223"
 	es := plugin.NewEventStream(patient)
-	es.AddEvent(conditionEvent("1", "Skin Rash", "782.1", time.Date(1985, time.January, 15, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(conditionEvent("2", "Atrial Fibrillation", "427.31", time.Date(1990, time.February, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, conditionEvent("1", "Skin Rash", "782.1", time.Date(1985, time.January, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, conditionEvent("2", "Atrial Fibrillation", "427.31", time.Date(1990, time.February, 15, 15, 0, 0, 0, time.UTC)))
 	weightFloat := float64(163)
 	weight := models.Quantity{Value: &weightFloat, Unit: "lb_av"}
-	es.AddEvent(observationEvent("3", "Body Weight", "29463-7", weight, time.Date(1991, time.February, 15, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(conditionEvent("4", "Congestive Heart Failure", "428.0", time.Date(1993, time.March, 15, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(conditionEvent("5", "Hypertension", "401.0", time.Date(1997, time.April, 15, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(conditionEvent("6", "Diabetes", "250.0", time.Date(2000, time.May, 15, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(conditionEvent("7", "Stroke", "434.91", time.Date(2004, time.June, 15, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(ageEvent("8", 65, time.Date(2005, time.July, 1, 0, 0, 0, 0, time.UTC)))
-	es.AddEvent(conditionEvent("9", "Ganglion Cyst", "727.4", time.Date(2006, time.July, 15, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(conditionEvent("10", "Vascular Disease", "443.9", time.Date(2007, time.July, 15, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(ageEvent("11", 75, time.Date(2015, time.July, 1, 0, 0, 0, 0, time.UTC)))
-	es.AddEvent(encounterEvent("12", "Consultation", "11429006", time.Date(2016, time.February, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, observationEvent("3", "Body Weight", "29463-7", weight, time.Date(1991, time.February, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, conditionEvent("4", "Congestive Heart Failure", "428.0", time.Date(1993, time.March, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, conditionEvent("5", "Hypertension", "401.0", time.Date(1997, time.April, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, conditionEvent("6", "Diabetes", "250.0", time.Date(2000, time.May, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, conditionEvent("7", "Stroke", "434.91", time.Date(2004, time.June, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, ageEvent("8", 65, time.Date(2005, time.July, 1, 0, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, conditionEvent("9", "Ganglion Cyst", "727.4", time.Date(2006, time.July, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, conditionEvent("10", "Vascular Disease", "443.9", time.Date(2007, time.July, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, ageEvent("11", 75, time.Date(2015, time.July, 1, 0, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, encounterEvent("12", "Consultation", "11429006", time.Date(2016, time.February, 15, 15, 0, 0, 0, time.UTC)))
 	weightFloat = float64(147)
 	weight = models.Quantity{Value: &weightFloat, Unit: "lb_av"}
-	es.AddEvent(observationEvent("13", "Body Weight", "29463-7", weight, time.Date(2016, time.February, 15, 15, 5, 0, 0, time.UTC)))
-	results, err := cs.Plugin.Calculate(es)
+	es.Events = append(es.Events, observationEvent("13", "Body Weight", "29463-7", weight, time.Date(2016, time.February, 15, 15, 5, 0, 0, time.UTC)))
+	results, err := cs.Plugin.Calculate(es, cs.FHIREndpointURL)
 	c.Assert(err, IsNil)
 	c.Assert(results, HasLen, 8)
 	cs.assertResult(c, results[0], time.Date(1990, time.February, 15, 15, 0, 0, 0, time.UTC), 1, 1.3, "1223", 0, 0, 0, 0, 0, 0, 1)
@@ -116,13 +118,13 @@ func (cs *CHA2DS2VAScPluginSuite) TestFactorsBeforeAFib(c *C) {
 	patient.Id = "1223"
 	es := plugin.NewEventStream(patient)
 	// These first two events shouldn't trigger risk calculation results since they are *before* afib
-	es.AddEvent(ageEvent("1", 65, time.Date(2005, time.July, 1, 0, 0, 0, 0, time.UTC)))
-	es.AddEvent(conditionEvent("2", "Congestive Heart Failure", "428.0", time.Date(2006, time.March, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, ageEvent("1", 65, time.Date(2005, time.July, 1, 0, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, conditionEvent("2", "Congestive Heart Failure", "428.0", time.Date(2006, time.March, 15, 15, 0, 0, 0, time.UTC)))
 	// Once afib is diagnosed, the previous events should already be factored in the score
-	es.AddEvent(conditionEvent("3", "Atrial Fibrillation", "427.31", time.Date(2010, time.February, 15, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(conditionEvent("4", "Diabetes", "250.0", time.Date(2012, time.May, 15, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(ageEvent("5", 75, time.Date(2015, time.July, 1, 0, 0, 0, 0, time.UTC)))
-	results, err := cs.Plugin.Calculate(es)
+	es.Events = append(es.Events, conditionEvent("3", "Atrial Fibrillation", "427.31", time.Date(2010, time.February, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, conditionEvent("4", "Diabetes", "250.0", time.Date(2012, time.May, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, ageEvent("5", 75, time.Date(2015, time.July, 1, 0, 0, 0, 0, time.UTC)))
+	results, err := cs.Plugin.Calculate(es, cs.FHIREndpointURL)
 	c.Assert(err, IsNil)
 	c.Assert(results, HasLen, 3)
 	cs.assertResult(c, results[0], time.Date(2010, time.February, 15, 15, 0, 0, 0, time.UTC), 3, 3.2, "1223", 1, 0, 0, 0, 0, 1, 1)
@@ -136,11 +138,11 @@ func (cs *CHA2DS2VAScPluginSuite) TestNoAFib(c *C) {
 	patient.Id = "1223"
 	es := plugin.NewEventStream(patient)
 	// None of these events should matter because this score is only valid for patients with atrial fibrillation
-	es.AddEvent(ageEvent("1", 65, time.Date(2005, time.July, 1, 0, 0, 0, 0, time.UTC)))
-	es.AddEvent(conditionEvent("2", "Congestive Heart Failure", "428.0", time.Date(2006, time.March, 15, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(conditionEvent("4", "Diabetes", "250.0", time.Date(2012, time.May, 15, 15, 0, 0, 0, time.UTC)))
-	es.AddEvent(ageEvent("5", 75, time.Date(2015, time.July, 1, 0, 0, 0, 0, time.UTC)))
-	results, err := cs.Plugin.Calculate(es)
+	es.Events = append(es.Events, ageEvent("1", 65, time.Date(2005, time.July, 1, 0, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, conditionEvent("2", "Congestive Heart Failure", "428.0", time.Date(2006, time.March, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, conditionEvent("4", "Diabetes", "250.0", time.Date(2012, time.May, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, ageEvent("5", 75, time.Date(2015, time.July, 1, 0, 0, 0, 0, time.UTC)))
+	results, err := cs.Plugin.Calculate(es, cs.FHIREndpointURL)
 	c.Assert(err, NotNil)
 	c.Assert(err, FitsTypeOf, plugin.NotApplicableError{})
 	c.Assert(err.Error(), Equals, "CHA2DS2-VASc is only applicable to patients with Atrial Fibrillation")
@@ -153,7 +155,7 @@ func (cs *CHA2DS2VAScPluginSuite) assertResult(c *C, result plugin.RiskServiceCa
 	c.Assert(*result.ProbabilityDecimal, Equals, pct)
 	c.Assert(result.Pie, NotNil)
 	pie := result.Pie
-	c.Assert(pie.Patient, Equals, "Patient/"+patientID)
+	c.Assert(pie.Patient, Equals, cs.FHIREndpointURL+"/Patient/"+patientID)
 	c.Assert(pie.Slices, HasLen, 7)
 	c.Assert(pie.Slices[0].Name, Equals, "Congestive Heart Failure")
 	c.Assert(pie.Slices[0].Weight, Equals, 11)
@@ -186,7 +188,7 @@ func (cs *CHA2DS2VAScPluginSuite) assertResult(c *C, result plugin.RiskServiceCa
 }
 
 func conditionEvent(id, name, icd9Code string, onset time.Time) plugin.Event {
-	var condition models.Condition
+	condition := new(models.Condition)
 	condition.Id = id
 	condition.Code = &models.CodeableConcept{
 		Coding: []models.Coding{
@@ -198,10 +200,10 @@ func conditionEvent(id, name, icd9Code string, onset time.Time) plugin.Event {
 	condition.VerificationStatus = "confirmed"
 
 	return plugin.Event{
-		Date:     onset,
-		Type:     "Condition",
-		End:      false,
-		Resource: condition,
+		Date:  onset,
+		Type:  "Condition",
+		End:   false,
+		Value: condition,
 	}
 }
 
@@ -219,21 +221,24 @@ func observationEvent(id, name, loincCode string, value models.Quantity, effecti
 	observation.Status = "final"
 
 	return plugin.Event{
-		Date:     effective,
-		Type:     "Observation",
-		End:      false,
-		Resource: observation,
+		Date:  effective,
+		Type:  "Observation",
+		End:   false,
+		Value: observation,
 	}
 }
 
 func ageEvent(id string, age int, effective time.Time) plugin.Event {
-	ageFloat := float64(age)
-	ageQuantity := models.Quantity{Value: &ageFloat, Unit: "a"}
-	return observationEvent(id, "Age", "30525-0", ageQuantity, effective)
+	return plugin.Event{
+		Date:  effective,
+		Type:  "Age",
+		End:   false,
+		Value: age,
+	}
 }
 
 func encounterEvent(id, name, snomedCode string, start time.Time) plugin.Event {
-	var encounter models.Encounter
+	encounter := new(models.Encounter)
 	encounter.Id = id
 	encounter.Type = []models.CodeableConcept{
 		{
@@ -249,9 +254,9 @@ func encounterEvent(id, name, snomedCode string, start time.Time) plugin.Event {
 	encounter.Status = "finished"
 
 	return plugin.Event{
-		Date:     start,
-		Type:     "Encounter",
-		End:      false,
-		Resource: encounter,
+		Date:  start,
+		Type:  "Encounter",
+		End:   false,
+		Value: encounter,
 	}
 }

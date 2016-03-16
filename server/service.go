@@ -7,7 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"sort"
+	"reflect"
+	"time"
 
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
@@ -37,13 +38,13 @@ func (rs *RiskService) RegisterPlugin(plugin plugin.RiskServicePlugin) {
 
 // Calculate invokes the register plugins to calculate scores for the given patient and post them back to FHIR.
 // This deletes all previous risk assessment instances for the patient and replaces them with new instances.
-func (rs *RiskService) Calculate(patientID string, fhirEndpoint url.URL, basisPieURL url.URL) error {
+func (rs *RiskService) Calculate(patientID string, fhirEndpointURL string, basisPieURL string) error {
 	// Get and post the query to retrieve all of the data needed by the risk service plugins
-	queryURL, err := rs.getRequiredDataQueryURL(patientID, fhirEndpoint)
+	queryURL, err := rs.getRequiredDataQueryURL(patientID, fhirEndpointURL)
 	if err != nil {
 		return err
 	}
-	response, err := http.Get(queryURL.String())
+	response, err := http.Get(queryURL)
 	if err != nil {
 		return err
 	}
@@ -53,20 +54,24 @@ func (rs *RiskService) Calculate(patientID string, fhirEndpoint url.URL, basisPi
 		return err
 	}
 
-	// Convert the data bundle into an EventStream
-	es, err := plugin.BundleToEventStream(bundle)
+	// Convert the data bundle and significant birthdays into an EventStream
+	es, err := BundleToEventStream(bundle)
 	if err != nil {
 		return err
 	}
 
 	// Now do the calculations for each plugin
 	for _, p := range rs.plugins {
-
 		if len(p.Config().Method.Coding) == 0 {
 			return errors.New("Risk Assessment Plugins MUST provide a method with a coding")
 		}
 
-		results, err := p.Calculate(es)
+		// Copy the event stream since we'll add significant birthday events based on plugin config
+		esClone := es.Clone()
+		addSignificantBirthdayEvents(esClone, p.Config().SignificantBirthdays)
+
+		// Calculate the results
+		results, err := p.Calculate(esClone, fhirEndpointURL)
 		if err != nil {
 			if _, ok := err.(plugin.NotApplicableError); ok {
 				continue
@@ -79,8 +84,30 @@ func (rs *RiskService) Calculate(patientID string, fhirEndpoint url.URL, basisPi
 		// Build up the bundle with risk assessments to delete and add
 		raBundle := buildRiskAssessmentBundle(patientID, results, basisPieURL, p)
 
-		// Store the new pies along with their method (to identify by patient and method)
+		// Submit the risk assessment bundle
+		data, err := json.Marshal(raBundle)
+		if err != nil {
+			return err
+		}
+		response, err = http.Post(fhirEndpointURL, "application/json", bytes.NewBuffer(data))
+		if err != nil {
+			return err
+		}
+		defer response.Body.Close()
+
+		if response.StatusCode != 200 {
+			return fmt.Errorf("Risk assessments did not post properly.  Received response code: %d", response.StatusCode)
+		}
+
+		// Delete the old pies
 		pieCollection := rs.db.C("pies")
+		method := p.Config().Method.Coding[0]
+		pieCollection.RemoveAll(bson.M{
+			"patient":       fhirEndpointURL + "/Patient/" + patientID,
+			"method.coding": bson.M{"$elemMatch": bson.M{"system": method.System, "code": method.Code}},
+		})
+
+		// Store the new pies along with their method (to identify by patient and method)
 		for i := range results {
 			method := p.Config().Method
 			pieWithMethod := struct {
@@ -94,62 +121,133 @@ func (rs *RiskService) Calculate(patientID string, fhirEndpoint url.URL, basisPi
 				return err
 			}
 		}
-
-		// Submit the risk assessment bundle
-		data, err := json.Marshal(raBundle)
-		if err != nil {
-			return err
-		}
-		response, err = http.Post(fhirEndpoint.String(), "application/json", bytes.NewBuffer(data))
-		if err != nil {
-			return err
-		}
-		defer response.Body.Close()
-
-		if response.StatusCode != 200 {
-			return fmt.Errorf("Risk assessments did not post properly.  Received response code: %d", response.StatusCode)
-		}
-
-		// Delete the old pies
-		method := p.Config().Method.Coding[0]
-		pieCollection.RemoveAll(bson.M{
-			"patient":       patientID,
-			"method.coding": bson.M{"$elemMatch": bson.M{"system": method.System, "code": method.Code}},
-		})
 	}
 
 	return nil
 }
 
+// BundleToEventStream takes a bundle of resources and converts them to an EventStream.  Currently only a
+// limited set of resource types are supported, with unsupported resource types resulting in an error.  If
+// the bundle contains more than one patient, this is also considered an error.
+func BundleToEventStream(bundle *models.Bundle) (es *plugin.EventStream, err error) {
+	var patient *models.Patient
+	events := make([]plugin.Event, 0, len(bundle.Entry))
+	for _, entry := range bundle.Entry {
+		switch r := entry.Resource.(type) {
+		default:
+			err = fmt.Errorf("Unsupported: Converting %s to Event", reflect.TypeOf(r).Elem().Name())
+			return
+		case *models.Patient:
+			if patient != nil {
+				err = errors.New("Found more than one patient in resources")
+				return
+			}
+			patient = r
+		case *models.Condition:
+			if onset, err := findDate(false, r.OnsetDateTime, r.OnsetPeriod, r.DateRecorded); err == nil {
+				events = append(events, plugin.Event{Date: onset, Type: "Condition", End: false, Value: r})
+			}
+			if abatement, err := findDate(true, r.AbatementDateTime, r.AbatementPeriod); err == nil {
+				events = append(events, plugin.Event{Date: abatement, Type: "Condition", End: true, Value: r})
+			}
+			// TODO: What happens if there is no date at all?
+		case *models.MedicationStatement:
+			if active, err := findDate(false, r.EffectiveDateTime, r.EffectivePeriod, r.DateAsserted); err == nil {
+				events = append(events, plugin.Event{Date: active, Type: "MedicationStatement", End: false, Value: r})
+			}
+			if inactive, err := findDate(true, r.EffectivePeriod); err == nil {
+				events = append(events, plugin.Event{Date: inactive, Type: "MedicationStatement", End: true, Value: r})
+			}
+			// TODO: What happens if there is no date at all?
+		case *models.Observation:
+			if effective, err := findDate(false, r.EffectiveDateTime, r.EffectivePeriod, r.Issued); err == nil {
+				events = append(events, plugin.Event{Date: effective, Type: "Observation", End: false, Value: r})
+			}
+			if ineffective, err := findDate(true, r.EffectivePeriod); err == nil {
+				events = append(events, plugin.Event{Date: ineffective, Type: "Observation", End: true, Value: r})
+			}
+			// TODO: What happens if there is no date at all?
+		}
+	}
+	es = plugin.NewEventStream(patient)
+	plugin.SortEventsByDate(events)
+	es.Events = events
+	return es, nil
+}
+
+func addSignificantBirthdayEvents(es *plugin.EventStream, birthdays []int) {
+	if len(birthdays) == 0 || es.Patient == nil || es.Patient.BirthDate == nil {
+		return
+	}
+
+	for _, age := range birthdays {
+		bd := es.Patient.BirthDate.Time.AddDate(age, 0, 0)
+		if bd.Before(time.Now()) {
+			es.Events = append(es.Events, plugin.Event{Date: bd, Type: "Age", End: false, Value: age})
+		}
+	}
+
+	plugin.SortEventsByDate(es.Events)
+}
+
+func findDate(usePeriodEnd bool, datesAndPeriods ...interface{}) (time.Time, error) {
+	for _, t := range datesAndPeriods {
+		switch t := t.(type) {
+		case models.FHIRDateTime:
+			return t.Time, nil
+		case *models.FHIRDateTime:
+			if t != nil {
+				return t.Time, nil
+			}
+		case models.Period:
+			if !usePeriodEnd && t.Start != nil {
+				return t.Start.Time, nil
+			} else if usePeriodEnd && t.End != nil {
+				return t.End.Time, nil
+			}
+		case *models.Period:
+			if !usePeriodEnd && t != nil && t.Start != nil {
+				return t.Start.Time, nil
+			} else if usePeriodEnd && t != nil && t.End != nil {
+				return t.End.Time, nil
+			}
+		}
+	}
+
+	return time.Time{}, errors.New("No date found")
+}
+
 // getRiskAssessmentDeleteURL constructs the URL to use for identifying all risk assessments for a given patient
 // using a given method.  This is used to delete the old set of assessments before adding the new set.
-func (rs *RiskService) getRequiredDataQueryURL(patientID string, fhirEndpoint url.URL) (queryURL *url.URL, err error) {
+func (rs *RiskService) getRequiredDataQueryURL(patientID, fhirEndpointURL string) (string, error) {
 	// Build up the query by finding all the resources we must _revinclude
 	revIncludeMap := make(map[string]string)
 	for _, p := range rs.plugins {
 		for _, resource := range p.Config().RequiredResourceTypes {
 			switch resource {
 			default:
-				err = fmt.Errorf("Unsupported required resource type: %s", resource)
-				return
+				return "", fmt.Errorf("Unsupported required resource type: %s", resource)
 			// NOTE: This only supports those resources we currently need in our reference implementation plugins
 			case "Condition", "MedicationStatement":
 				revIncludeMap[resource] = "patient"
 			}
 		}
 	}
-	if queryURL, err = url.Parse(fhirEndpoint.String() + "/Patient"); err == nil {
-		params := url.Values{}
-		params.Set("id", patientID)
-		for resource, property := range revIncludeMap {
-			params.Add("_revinclude", fmt.Sprintf("%s:%s", resource, property))
-		}
-		queryURL.RawQuery = params.Encode()
+	queryURL, err := url.Parse(fhirEndpointURL + "/Patient")
+	if err != nil {
+		return "", err
 	}
-	return
+	params := url.Values{}
+	params.Set("_id", patientID)
+	for resource, property := range revIncludeMap {
+		params.Add("_revinclude", fmt.Sprintf("%s:%s", resource, property))
+	}
+	queryURL.RawQuery = params.Encode()
+
+	return queryURL.String(), nil
 }
 
-func buildRiskAssessmentBundle(patientID string, results []plugin.RiskServiceCalculationResult, basisPieURL url.URL, p plugin.RiskServicePlugin) *models.Bundle {
+func buildRiskAssessmentBundle(patientID string, results []plugin.RiskServiceCalculationResult, basisPieURL string, p plugin.RiskServicePlugin) *models.Bundle {
 	raBundle := &models.Bundle{}
 	raBundle.Type = "transaction"
 	raBundle.Entry = make([]models.BundleEntryComponent, len(results)+1)
@@ -186,7 +284,7 @@ func getRiskAssessmentDeleteURL(concept models.CodeableConcept, patientID string
 // choosing whichever was last in the original order
 func sortAndConsolidate(results []plugin.RiskServiceCalculationResult) []plugin.RiskServiceCalculationResult {
 	// Use stable sort to retain original order on equal elements
-	sort.Stable(byAsOfDate(results))
+	plugin.SortResultsByAsOfDate(results)
 	for i := 0; i < len(results); i++ {
 		if i > 0 && results[i].AsOf.Equal(results[i-1].AsOf) {
 			results = append(results[:(i-1)], results[i:]...)
@@ -194,16 +292,4 @@ func sortAndConsolidate(results []plugin.RiskServiceCalculationResult) []plugin.
 		}
 	}
 	return results
-}
-
-type byAsOfDate []plugin.RiskServiceCalculationResult
-
-func (d byAsOfDate) Len() int {
-	return len(d)
-}
-func (d byAsOfDate) Swap(i, j int) {
-	d[i], d[j] = d[j], d[i]
-}
-func (d byAsOfDate) Less(i, j int) bool {
-	return d[i].AsOf.Before(d[j].AsOf)
 }

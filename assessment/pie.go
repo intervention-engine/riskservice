@@ -33,8 +33,11 @@ func NewPie(patientUrl string) *Pie {
 	return pie
 }
 
-func (p *Pie) Clone() *Pie {
+func (p *Pie) Clone(generateNewID bool) *Pie {
 	cloned := *p
+	if generateNewID {
+		cloned.Id = bson.NewObjectId()
+	}
 	cloned.Slices = make([]Slice, len(p.Slices))
 	copy(cloned.Slices, p.Slices)
 	return &cloned
