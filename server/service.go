@@ -18,27 +18,33 @@ import (
 	"github.com/intervention-engine/riskservice/plugin"
 )
 
-// RiskService is a container for risk service plugins that can handle the details of getting data needed for the
-// plugins, invoking the calculations on the plugins, posting the new results back to the FHIR server, and saving
-// the risk pies to the database.
-type RiskService struct {
+// RiskService is an interface for the functions that must be supported by a risk service used in our
+// reference implementation risk service server.
+type RiskService interface {
+	Calculate(patientID string, fhirEndpointURL string, basisPieURL string) error
+}
+
+// ReferenceRiskService is a container for risk service plugins that can handle the details of getting data needed
+// for the plugins, invoking the calculations on the plugins, posting the new results back to the FHIR server, and
+// saving the risk pies to the database.
+type ReferenceRiskService struct {
 	plugins []plugin.RiskServicePlugin
 	db      *mgo.Database
 }
 
-// NewRiskService creates a new risk service backed by the passed in MongoDB instance
-func NewRiskService(db *mgo.Database) *RiskService {
-	return &RiskService{db: db}
+// NewReferenceRiskService creates a new risk service backed by the passed in MongoDB instance
+func NewReferenceRiskService(db *mgo.Database) *ReferenceRiskService {
+	return &ReferenceRiskService{db: db}
 }
 
 // RegisterPlugin registers a plugin for use by the risk service
-func (rs *RiskService) RegisterPlugin(plugin plugin.RiskServicePlugin) {
+func (rs *ReferenceRiskService) RegisterPlugin(plugin plugin.RiskServicePlugin) {
 	rs.plugins = append(rs.plugins, plugin)
 }
 
 // Calculate invokes the register plugins to calculate scores for the given patient and post them back to FHIR.
 // This deletes all previous risk assessment instances for the patient and replaces them with new instances.
-func (rs *RiskService) Calculate(patientID string, fhirEndpointURL string, basisPieURL string) error {
+func (rs *ReferenceRiskService) Calculate(patientID string, fhirEndpointURL string, basisPieURL string) error {
 	// Get and post the query to retrieve all of the data needed by the risk service plugins
 	queryURL, err := rs.getRequiredDataQueryURL(patientID, fhirEndpointURL)
 	if err != nil {
@@ -124,6 +130,36 @@ func (rs *RiskService) Calculate(patientID string, fhirEndpointURL string, basis
 	}
 
 	return nil
+}
+
+// getRiskAssessmentDeleteURL constructs the URL to use for identifying all risk assessments for a given patient
+// using a given method.  This is used to delete the old set of assessments before adding the new set.
+func (rs *ReferenceRiskService) getRequiredDataQueryURL(patientID, fhirEndpointURL string) (string, error) {
+	// Build up the query by finding all the resources we must _revinclude
+	revIncludeMap := make(map[string]string)
+	for _, p := range rs.plugins {
+		for _, resource := range p.Config().RequiredResourceTypes {
+			switch resource {
+			default:
+				return "", fmt.Errorf("Unsupported required resource type: %s", resource)
+			// NOTE: This only supports those resources we currently need in our reference implementation plugins
+			case "Condition", "MedicationStatement":
+				revIncludeMap[resource] = "patient"
+			}
+		}
+	}
+	queryURL, err := url.Parse(fhirEndpointURL + "/Patient")
+	if err != nil {
+		return "", err
+	}
+	params := url.Values{}
+	params.Set("_id", patientID)
+	for resource, property := range revIncludeMap {
+		params.Add("_revinclude", fmt.Sprintf("%s:%s", resource, property))
+	}
+	queryURL.RawQuery = params.Encode()
+
+	return queryURL.String(), nil
 }
 
 // BundleToEventStream takes a bundle of resources and converts them to an EventStream.  Currently only a
@@ -215,36 +251,6 @@ func findDate(usePeriodEnd bool, datesAndPeriods ...interface{}) (time.Time, err
 	}
 
 	return time.Time{}, errors.New("No date found")
-}
-
-// getRiskAssessmentDeleteURL constructs the URL to use for identifying all risk assessments for a given patient
-// using a given method.  This is used to delete the old set of assessments before adding the new set.
-func (rs *RiskService) getRequiredDataQueryURL(patientID, fhirEndpointURL string) (string, error) {
-	// Build up the query by finding all the resources we must _revinclude
-	revIncludeMap := make(map[string]string)
-	for _, p := range rs.plugins {
-		for _, resource := range p.Config().RequiredResourceTypes {
-			switch resource {
-			default:
-				return "", fmt.Errorf("Unsupported required resource type: %s", resource)
-			// NOTE: This only supports those resources we currently need in our reference implementation plugins
-			case "Condition", "MedicationStatement":
-				revIncludeMap[resource] = "patient"
-			}
-		}
-	}
-	queryURL, err := url.Parse(fhirEndpointURL + "/Patient")
-	if err != nil {
-		return "", err
-	}
-	params := url.Values{}
-	params.Set("_id", patientID)
-	for resource, property := range revIncludeMap {
-		params.Add("_revinclude", fmt.Sprintf("%s:%s", resource, property))
-	}
-	queryURL.RawQuery = params.Encode()
-
-	return queryURL.String(), nil
 }
 
 func buildRiskAssessmentBundle(patientID string, results []plugin.RiskServiceCalculationResult, basisPieURL string, p plugin.RiskServicePlugin) *models.Bundle {

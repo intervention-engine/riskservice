@@ -28,7 +28,7 @@ type ServiceSuite struct {
 	DBServer *dbtest.DBServer
 	Session  *mgo.Session
 	Database *mgo.Database
-	Service  *RiskService
+	Service  *ReferenceRiskService
 	Server   *httptest.Server
 }
 
@@ -43,10 +43,10 @@ func (s *ServiceSuite) SetUpSuite(c *C) {
 func (s *ServiceSuite) SetUpTest(c *C) {
 	s.Session = s.DBServer.Session()
 	s.Database = s.Session.DB("riskservice-test")
-	s.Service = NewRiskService(s.Database)
+	s.Service = NewReferenceRiskService(s.Database)
 
 	e := echo.New()
-	server.RegisterRoutes(e, make(map[string][]echo.Middleware), server.NewMongoDataAccessLayer(s.Database))
+	server.RegisterRoutes(e, make(map[string][]echo.Middleware), server.NewMongoDataAccessLayer(s.Database), server.Config{})
 	s.Server = httptest.NewServer(e.Router())
 }
 

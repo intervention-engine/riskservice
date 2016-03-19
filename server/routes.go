@@ -1,7 +1,7 @@
 package server
 
 import (
-	"time"
+	"fmt"
 
 	"github.com/intervention-engine/riskservice/assessment"
 	"github.com/labstack/echo"
@@ -9,8 +9,8 @@ import (
 	"gopkg.in/mgo.v2/bson"
 )
 
-// Sets up the http request handlers with Echo
-func RegisterRiskHandlers(e *echo.Echo, db *mgo.Database, baseUrl string, requestChan chan<- CalculationRequest) {
+// RegisterRoutes sets up the http request handlers with Echo
+func RegisterRoutes(e *echo.Echo, db *mgo.Database, basePieURL string, service RiskService, fnDelayer *FunctionDelayer) {
 	e.Get("/pies/:id", func(c *echo.Context) (err error) {
 		pie := &assessment.Pie{}
 		id := c.Param("id")
@@ -27,15 +27,12 @@ func RegisterRiskHandlers(e *echo.Echo, db *mgo.Database, baseUrl string, reques
 	})
 
 	e.Post("/calculate", func(c *echo.Context) (err error) {
-		patientId := c.Form("patientId")
-		fhirEndpointUrl := c.Form("fhirEndpointUrl")
-		stringTime := c.Form("timestamp")
-		ts, err := time.Parse(time.RFC3339, stringTime)
-		if err != nil {
-			c.String(400, "Expected timestamp to be populated with an RFC3339 formatted time.")
-			return
-		}
-		requestChan <- CalculationRequest{fhirEndpointUrl, patientId, ts, time.Now()}
+		patientID := c.Form("patientId")
+		fhirEndpointURL := c.Form("fhirEndpointUrl")
+		key := fmt.Sprintf("%s@%s", patientID, fhirEndpointURL)
+		fnDelayer.Delay(key, func() {
+			service.Calculate(patientID, fhirEndpointURL, basePieURL)
+		})
 		return
 	})
 }

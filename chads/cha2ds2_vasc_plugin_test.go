@@ -143,10 +143,21 @@ func (cs *CHA2DS2VAScPluginSuite) TestNoAFib(c *C) {
 	es.Events = append(es.Events, conditionEvent("4", "Diabetes", "250.0", time.Date(2012, time.May, 15, 15, 0, 0, 0, time.UTC)))
 	es.Events = append(es.Events, ageEvent("5", 75, time.Date(2015, time.July, 1, 0, 0, 0, 0, time.UTC)))
 	results, err := cs.Plugin.Calculate(es, cs.FHIREndpointURL)
-	c.Assert(err, NotNil)
-	c.Assert(err, FitsTypeOf, plugin.NotApplicableError{})
-	c.Assert(err.Error(), Equals, "CHA2DS2-VASc is only applicable to patients with Atrial Fibrillation")
-	c.Assert(results, HasLen, 0)
+
+	// COMMENTED OUT:  While this is the INTENDED design, the frontend currently does not support it.
+	// Instead we must return a single result with score 0.
+	// c.Assert(err, NotNil)
+	// c.Assert(err, FitsTypeOf, plugin.NotApplicableError{})
+	// c.Assert(err.Error(), Equals, "CHA2DS2-VASc is only applicable to patients with Atrial Fibrillation")
+	// c.Assert(results, HasLen, 0)
+
+	// TODO: Remove these assertions and uncomment above when frontend supports N/A
+	c.Assert(err, IsNil)
+	c.Assert(results, HasLen, 1)
+	obtainedDt := results[0].AsOf
+	c.Assert(time.Since(obtainedDt).Minutes() < 1.0, Equals, true)
+	cs.assertResult(c, results[0], obtainedDt, 0, 0, "1223", 0, 0, 0, 0, 0, 0, 0)
+
 }
 
 func (cs *CHA2DS2VAScPluginSuite) assertResult(c *C, result plugin.RiskServiceCalculationResult, asOf time.Time, score int, pct float64, patientID string, chf, hypertension, diabetes, stroke, vasc, age, gender int) {
