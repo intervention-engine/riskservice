@@ -25,7 +25,6 @@ type EventStream struct {
 func NewEventStream(patient *models.Patient) *EventStream {
 	es := new(EventStream)
 	es.Patient = patient
-	es.Events = make([]Event, 0)
 	return es
 }
 

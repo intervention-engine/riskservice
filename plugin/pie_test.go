@@ -57,3 +57,9 @@ func (p *PieSuite) TestPieClone(c *C) {
 	c.Assert(clone.Slices[1].Value, Equals, 2)
 	c.Assert(p.Pie.Slices[1].Value, Equals, 3)
 }
+
+func (p *PieSuite) TestPieCloneSameID(c *C) {
+	// Test initial clone
+	clone := p.Pie.Clone(false)
+	c.Assert(clone.Id.Hex(), Equals, p.Pie.Id.Hex())
+}

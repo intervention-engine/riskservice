@@ -13,6 +13,7 @@ import (
 type CHA2DS2VAScPlugin struct {
 }
 
+// NewCHA2DS2VAScPlugin returns a new CHA2DS2VAScPlugin
 func NewCHA2DS2VAScPlugin() *CHA2DS2VAScPlugin {
 	return &CHA2DS2VAScPlugin{}
 }

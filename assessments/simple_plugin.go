@@ -13,6 +13,7 @@ import (
 type SimplePlugin struct {
 }
 
+// NewSimplePlugin returns a new SimplePlugin
 func NewSimplePlugin() *SimplePlugin {
 	return &SimplePlugin{}
 }
