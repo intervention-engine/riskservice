@@ -4,6 +4,14 @@ go:
 - 1.6
 script: go test $(go list ./... | grep -v /vendor/)
 install: true
+services:
+- mongodb
+addons:
+  apt:
+    sources:
+    - mongodb-3.2-precise
+    packages:
+    - mongodb-org-server
 branches:
   only:
   - master
