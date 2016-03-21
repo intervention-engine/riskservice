@@ -133,6 +133,32 @@ func (cs *SimplePluginSuite) TestPatientWithDuplicates(c *C) {
 	cs.assertResult(c, results[5], time.Date(2015, time.May, 1, 15, 30, 0, 0, time.UTC), 4, "1223", 2, 2)
 }
 
+func (cs *SimplePluginSuite) TestFutureEventsAreIgnored(c *C) {
+	birthDate := &models.FHIRDateTime{Time: time.Date(1940, time.July, 1, 0, 0, 0, 0, time.UTC), Precision: models.Date}
+	patient := &models.Patient{Gender: "female", BirthDate: birthDate}
+	patient.Id = "1223"
+	es := plugin.NewEventStream(patient)
+	afibStart, afibEnd := conditionStartAndEndEvents("1", "Atrial Fibrillation", "427.31", time.Date(2010, time.February, 15, 15, 0, 0, 0, time.UTC), time.Date(2035, time.May, 15, 15, 0, 0, 0, time.UTC))
+	aspirinStart, aspirinEnd := medicationStartAndEndEvents("2", "Aspirin", "1191", time.Date(2010, time.February, 15, 15, 30, 0, 0, time.UTC), time.Date(2015, time.May, 15, 15, 30, 0, 0, time.UTC))
+	es.Events = append(es.Events, afibStart)
+	es.Events = append(es.Events, aspirinStart)
+	es.Events = append(es.Events, conditionEvent("3", "Hypertension", "401.0", time.Date(2015, time.April, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, medicationEvent("4", "Lisinopril", "104377", time.Date(2015, time.April, 15, 15, 30, 0, 0, time.UTC)))
+	es.Events = append(es.Events, aspirinEnd)
+	// This future event should not be counted!
+	es.Events = append(es.Events, conditionEvent("5", "Stroke", "434.91", time.Date(2030, time.June, 15, 15, 0, 0, 0, time.UTC)))
+	// This future event end should not be counted!
+	es.Events = append(es.Events, afibEnd)
+	results, err := cs.Plugin.Calculate(es, cs.FHIREndpointURL)
+	c.Assert(err, IsNil)
+	c.Assert(results, HasLen, 5)
+	cs.assertResult(c, results[0], time.Date(2010, time.February, 15, 15, 0, 0, 0, time.UTC), 1, "1223", 1, 0)
+	cs.assertResult(c, results[1], time.Date(2010, time.February, 15, 15, 30, 0, 0, time.UTC), 2, "1223", 1, 1)
+	cs.assertResult(c, results[2], time.Date(2015, time.April, 15, 15, 0, 0, 0, time.UTC), 3, "1223", 2, 1)
+	cs.assertResult(c, results[3], time.Date(2015, time.April, 15, 15, 30, 0, 0, time.UTC), 4, "1223", 2, 2)
+	cs.assertResult(c, results[4], time.Date(2015, time.May, 15, 15, 30, 0, 0, time.UTC), 3, "1223", 2, 1)
+}
+
 func (cs *SimplePluginSuite) TestNonSignificantEvents(c *C) {
 	birthDate := &models.FHIRDateTime{Time: time.Date(1940, time.July, 1, 0, 0, 0, 0, time.UTC), Precision: models.Date}
 	patient := &models.Patient{Gender: "female", BirthDate: birthDate}

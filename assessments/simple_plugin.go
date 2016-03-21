@@ -49,6 +49,11 @@ func (c *SimplePlugin) Calculate(es *plugin.EventStream, fhirEndpointURL string)
 
 	// Now go through the event stream, updating the pie
 	for _, event := range es.Events {
+		// NOTE: guard against future dates (for example, our patient generator can create future events)
+		if event.Date.Local().After(time.Now()) {
+			continue
+		}
+
 		var isFactor bool
 		pie = pie.Clone(true)
 		switch r := event.Value.(type) {

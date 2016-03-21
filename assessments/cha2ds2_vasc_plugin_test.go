@@ -112,6 +112,28 @@ func (cs *CHA2DS2VAScPluginSuite) TestNonSignificantEvents(c *C) {
 	cs.assertResult(c, results[7], time.Date(2015, time.July, 1, 0, 0, 0, 0, time.UTC), 9, 15.2, "1223", 1, 1, 1, 2, 1, 2, 1)
 }
 
+func (cs *CHA2DS2VAScPluginSuite) TestFutureEventsAreIgnored(c *C) {
+	birthDate := &models.FHIRDateTime{Time: time.Date(1940, time.July, 1, 0, 0, 0, 0, time.UTC), Precision: models.Date}
+	patient := &models.Patient{Gender: "female", BirthDate: birthDate}
+	patient.Id = "1223"
+	es := plugin.NewEventStream(patient)
+	es.Events = append(es.Events, conditionEvent("1", "Atrial Fibrillation", "427.31", time.Date(1990, time.February, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, conditionEvent("2", "Hypertension", "401.0", time.Date(1997, time.April, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, ageEvent("3", 65, time.Date(2005, time.July, 1, 0, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, conditionEvent("4", "Vascular Disease", "443.9", time.Date(2007, time.July, 15, 15, 0, 0, 0, time.UTC)))
+	es.Events = append(es.Events, ageEvent("5", 75, time.Date(2015, time.July, 1, 0, 0, 0, 0, time.UTC)))
+	// This future event should not be counted!
+	es.Events = append(es.Events, conditionEvent("6", "Stroke", "434.91", time.Date(2035, time.June, 15, 15, 0, 0, 0, time.UTC)))
+	results, err := cs.Plugin.Calculate(es, cs.FHIREndpointURL)
+	c.Assert(err, IsNil)
+	c.Assert(results, HasLen, 5)
+	cs.assertResult(c, results[0], time.Date(1990, time.February, 15, 15, 0, 0, 0, time.UTC), 1, 1.3, "1223", 0, 0, 0, 0, 0, 0, 1)
+	cs.assertResult(c, results[1], time.Date(1997, time.April, 15, 15, 0, 0, 0, time.UTC), 2, 2.2, "1223", 0, 1, 0, 0, 0, 0, 1)
+	cs.assertResult(c, results[2], time.Date(2005, time.July, 1, 0, 0, 0, 0, time.UTC), 3, 3.2, "1223", 0, 1, 0, 0, 0, 1, 1)
+	cs.assertResult(c, results[3], time.Date(2007, time.July, 15, 15, 0, 0, 0, time.UTC), 4, 4.0, "1223", 0, 1, 0, 0, 1, 1, 1)
+	cs.assertResult(c, results[4], time.Date(2015, time.July, 1, 0, 0, 0, 0, time.UTC), 5, 6.7, "1223", 0, 1, 0, 0, 1, 2, 1)
+}
+
 func (cs *CHA2DS2VAScPluginSuite) TestFactorsBeforeAFib(c *C) {
 	birthDate := &models.FHIRDateTime{Time: time.Date(1940, time.July, 1, 0, 0, 0, 0, time.UTC), Precision: models.Date}
 	patient := &models.Patient{Gender: "female", BirthDate: birthDate}

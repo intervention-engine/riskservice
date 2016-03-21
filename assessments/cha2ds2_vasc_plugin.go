@@ -73,8 +73,9 @@ func (c *CHA2DS2VAScPlugin) Calculate(es *plugin.EventStream, fhirEndpointURL st
 	// Now go through the event stream, updating the pie
 	var hasAfib bool
 	for _, event := range es.Events {
-		// NOTE: We are not paying attention to end times -- if it's in the patient history, we count it
-		if event.End {
+		// NOTE: We are not paying attention to end times -- if it's in the patient history, we count it.
+		// Also guard against future dates (for example, our patient generator can create future events)
+		if event.End || event.Date.Local().After(time.Now()) {
 			continue
 		}
 
