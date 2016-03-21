@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/intervention-engine/fhir/models"
-	"github.com/intervention-engine/riskservice/assessment"
 )
 
 type RiskServicePlugin interface {
@@ -17,7 +16,7 @@ type RiskServicePluginConfig struct {
 	Name                  string
 	Method                models.CodeableConcept
 	PredictedOutcome      models.CodeableConcept
-	DefaultPieSlices      []assessment.Slice
+	DefaultPieSlices      []Slice
 	RequiredResourceTypes []string
 	SignificantBirthdays  []int
 }
@@ -26,7 +25,7 @@ type RiskServiceCalculationResult struct {
 	AsOf               time.Time
 	Score              *int
 	ProbabilityDecimal *float64
-	Pie                *assessment.Pie
+	Pie                *Pie
 }
 
 // GetProbabilityDecimalOrScore returns the ProbabilityDecimal value if it exists, otherwise it returns the score.

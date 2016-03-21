@@ -1,11 +1,10 @@
-package chads
+package assessments
 
 import (
 	"strings"
 	"time"
 
 	"github.com/intervention-engine/fhir/models"
-	"github.com/intervention-engine/riskservice/assessment"
 	"github.com/intervention-engine/riskservice/plugin"
 )
 
@@ -27,7 +26,7 @@ func (c *CHA2DS2VAScPlugin) Config() plugin.RiskServicePluginConfig {
 			Text:   "CHA2DS2–VASc score",
 		},
 		PredictedOutcome: models.CodeableConcept{Text: "Stroke"},
-		DefaultPieSlices: []assessment.Slice{
+		DefaultPieSlices: []plugin.Slice{
 			{Name: "Congestive Heart Failure", Weight: 11, MaxValue: 1},
 			{Name: "Hypertension", Weight: 11, MaxValue: 1},
 			{Name: "Diabetes", Weight: 11, MaxValue: 1},
@@ -62,7 +61,7 @@ func (c *CHA2DS2VAScPlugin) Calculate(es *plugin.EventStream, fhirEndpointURL st
 	// }
 
 	// Create the initial pie based on gender
-	pie := assessment.NewPie(fhirEndpointURL + "/Patient/" + es.Patient.Id)
+	pie := plugin.NewPie(fhirEndpointURL + "/Patient/" + es.Patient.Id)
 	pie.Slices = c.Config().DefaultPieSlices
 	if es.Patient.Gender == "female" {
 		pie.UpdateSliceValue("Gender", 1)
@@ -129,7 +128,7 @@ func (c *CHA2DS2VAScPlugin) Calculate(es *plugin.EventStream, fhirEndpointURL st
 	if len(results) == 0 {
 		zero := 0
 		zeroFlt := 0.0
-		defaultPie := assessment.NewPie(fhirEndpointURL + "/Patient/" + es.Patient.Id)
+		defaultPie := plugin.NewPie(fhirEndpointURL + "/Patient/" + es.Patient.Id)
 		defaultPie.Slices = c.Config().DefaultPieSlices
 		results = append(results, plugin.RiskServiceCalculationResult{
 			AsOf:               time.Now(),

@@ -1,4 +1,4 @@
-package chads
+package assessments
 
 import (
 	"testing"
@@ -196,78 +196,4 @@ func (cs *CHA2DS2VAScPluginSuite) assertResult(c *C, result plugin.RiskServiceCa
 	c.Assert(pie.Slices[6].Weight, Equals, 11)
 	c.Assert(pie.Slices[6].MaxValue, Equals, 1)
 	c.Assert(pie.Slices[6].Value, Equals, gender)
-}
-
-func conditionEvent(id, name, icd9Code string, onset time.Time) plugin.Event {
-	condition := new(models.Condition)
-	condition.Id = id
-	condition.Code = &models.CodeableConcept{
-		Coding: []models.Coding{
-			models.Coding{System: "http://hl7.org/fhir/sid/icd-9", Code: icd9Code, Display: name},
-		},
-		Text: name,
-	}
-	condition.OnsetDateTime = &models.FHIRDateTime{Time: onset, Precision: models.Timestamp}
-	condition.VerificationStatus = "confirmed"
-
-	return plugin.Event{
-		Date:  onset,
-		Type:  "Condition",
-		End:   false,
-		Value: condition,
-	}
-}
-
-func observationEvent(id, name, loincCode string, value models.Quantity, effective time.Time) plugin.Event {
-	var observation models.Observation
-	observation.Id = id
-	observation.Code = &models.CodeableConcept{
-		Coding: []models.Coding{
-			models.Coding{System: "http://loinc.org", Code: loincCode, Display: name},
-		},
-		Text: name,
-	}
-	observation.ValueQuantity = &value
-	observation.EffectiveDateTime = &models.FHIRDateTime{Time: effective, Precision: models.Timestamp}
-	observation.Status = "final"
-
-	return plugin.Event{
-		Date:  effective,
-		Type:  "Observation",
-		End:   false,
-		Value: observation,
-	}
-}
-
-func ageEvent(id string, age int, effective time.Time) plugin.Event {
-	return plugin.Event{
-		Date:  effective,
-		Type:  "Age",
-		End:   false,
-		Value: age,
-	}
-}
-
-func encounterEvent(id, name, snomedCode string, start time.Time) plugin.Event {
-	encounter := new(models.Encounter)
-	encounter.Id = id
-	encounter.Type = []models.CodeableConcept{
-		{
-			Coding: []models.Coding{
-				models.Coding{System: "http://snomed.info/sct", Code: snomedCode, Display: name},
-			},
-			Text: name,
-		},
-	}
-	encounter.Period = &models.Period{
-		Start: &models.FHIRDateTime{Time: start, Precision: models.Timestamp},
-	}
-	encounter.Status = "finished"
-
-	return plugin.Event{
-		Date:  start,
-		Type:  "Encounter",
-		End:   false,
-		Value: encounter,
-	}
 }

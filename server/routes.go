@@ -3,7 +3,7 @@ package server
 import (
 	"fmt"
 
-	"github.com/intervention-engine/riskservice/assessment"
+	"github.com/intervention-engine/riskservice/plugin"
 	"github.com/labstack/echo"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
@@ -12,7 +12,7 @@ import (
 // RegisterRoutes sets up the http request handlers with Echo
 func RegisterRoutes(e *echo.Echo, db *mgo.Database, basePieURL string, service RiskService, fnDelayer *FunctionDelayer) {
 	e.Get("/pies/:id", func(c *echo.Context) (err error) {
-		pie := &assessment.Pie{}
+		pie := &plugin.Pie{}
 		id := c.Param("id")
 		if bson.IsObjectIdHex(id) {
 			query := db.C("pies").FindId(bson.ObjectIdHex(id))

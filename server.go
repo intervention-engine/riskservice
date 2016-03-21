@@ -10,9 +10,8 @@ import (
 
 	"github.com/intervention-engine/fhir/models"
 	"github.com/intervention-engine/fhir/upload"
-	"github.com/intervention-engine/riskservice/chads"
+	"github.com/intervention-engine/riskservice/assessments"
 	"github.com/intervention-engine/riskservice/server"
-	"github.com/intervention-engine/riskservice/simple"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	"gopkg.in/mgo.v2"
@@ -45,8 +44,8 @@ func main() {
 	basePieURL := discoverSelf() + "pies"
 	db := session.DB("riskservice")
 	service := server.NewReferenceRiskService(db)
-	service.RegisterPlugin(chads.NewCHA2DS2VAScPlugin())
-	service.RegisterPlugin(simple.NewSimplePlugin())
+	service.RegisterPlugin(assessments.NewCHA2DS2VAScPlugin())
+	service.RegisterPlugin(assessments.NewSimplePlugin())
 	fnDelayer := server.NewFunctionDelayer(3 * time.Second)
 	server.RegisterRoutes(e, db, basePieURL, service, fnDelayer)
 	e.Use(middleware.Logger())

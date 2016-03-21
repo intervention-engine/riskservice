@@ -14,7 +14,6 @@ import (
 	"gopkg.in/mgo.v2/bson"
 
 	"github.com/intervention-engine/fhir/models"
-	"github.com/intervention-engine/riskservice/assessment"
 	"github.com/intervention-engine/riskservice/plugin"
 )
 
@@ -117,8 +116,8 @@ func (rs *ReferenceRiskService) Calculate(patientID string, fhirEndpointURL stri
 		for i := range results {
 			method := p.Config().Method
 			pieWithMethod := struct {
-				assessment.Pie `bson:",inline"`
-				Method         *models.CodeableConcept `bson:"method"`
+				plugin.Pie `bson:",inline"`
+				Method     *models.CodeableConcept `bson:"method"`
 			}{
 				*results[i].Pie,
 				&method,

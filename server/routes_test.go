@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/intervention-engine/riskservice/assessment"
+	"github.com/intervention-engine/riskservice/plugin"
 	"github.com/labstack/echo"
 	"github.com/pebbe/util"
 	. "gopkg.in/check.v1"
@@ -56,7 +56,7 @@ func (r *RoutesSuite) TearDownSuite(c *C) {
 func (r *RoutesSuite) TestPieRoute(c *C) {
 	// Insert the pie in the database
 	patientURL := "http://testurl.org"
-	pie := assessment.NewPie(patientURL)
+	pie := plugin.NewPie(patientURL)
 	r.Database.C("pies").Insert(pie)
 
 	// Now get the pie from the server

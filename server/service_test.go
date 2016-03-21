@@ -12,10 +12,8 @@ import (
 
 	"github.com/intervention-engine/fhir/models"
 	"github.com/intervention-engine/fhir/server"
-	"github.com/intervention-engine/riskservice/assessment"
-	"github.com/intervention-engine/riskservice/chads"
+	"github.com/intervention-engine/riskservice/assessments"
 	"github.com/intervention-engine/riskservice/plugin"
-	"github.com/intervention-engine/riskservice/simple"
 	"github.com/labstack/echo"
 	"github.com/pebbe/util"
 	. "gopkg.in/check.v1"
@@ -89,8 +87,8 @@ func (s *ServiceSuite) TestEndToEndCalculations(c *C) {
 	c.Assert(count, Equals, 0)
 
 	// Now register the plugins and request the calculation!
-	s.Service.RegisterPlugin(chads.NewCHA2DS2VAScPlugin())
-	s.Service.RegisterPlugin(simple.NewSimplePlugin())
+	s.Service.RegisterPlugin(assessments.NewCHA2DS2VAScPlugin())
+	s.Service.RegisterPlugin(assessments.NewSimplePlugin())
 
 	err = s.Service.Calculate(patientID, s.Server.URL, s.Server.URL+"/pies")
 	util.CheckErr(err)
@@ -165,8 +163,8 @@ func (s *ServiceSuite) TestEndToEndOverwritingCalculations(c *C) {
 	c.Assert(count, Equals, 0)
 
 	// Now register the plugins and request the calculation!
-	s.Service.RegisterPlugin(chads.NewCHA2DS2VAScPlugin())
-	s.Service.RegisterPlugin(simple.NewSimplePlugin())
+	s.Service.RegisterPlugin(assessments.NewCHA2DS2VAScPlugin())
+	s.Service.RegisterPlugin(assessments.NewSimplePlugin())
 
 	// This is where we run it a bunch of times, but since it *should* clean up old data every time,
 	// then it should have the same results as a single time.
@@ -232,7 +230,7 @@ func (s *ServiceSuite) checkCHADSRiskAssessment(c *C, ra *models.RiskAssessment,
 
 func (s *ServiceSuite) checkCHADSPie(c *C, ra *models.RiskAssessment, patientID string, chf, hypertension, diabetes, stroke, vascular, age, gender int) {
 	pieID := strings.TrimPrefix(ra.Basis[0].Reference, s.Server.URL+"/pies/")
-	pie := new(assessment.Pie)
+	pie := new(plugin.Pie)
 	err := s.Database.C("pies").FindId(bson.ObjectIdHex(pieID)).One(pie)
 	util.CheckErr(err)
 	// TODO: This should really be full patient URL
@@ -266,7 +264,7 @@ func (s *ServiceSuite) checkSimpleRiskAssessment(c *C, ra *models.RiskAssessment
 
 func (s *ServiceSuite) checkSimplePie(c *C, ra *models.RiskAssessment, patientID string, conditions, medications int) {
 	pieID := strings.TrimPrefix(ra.Basis[0].Reference, s.Server.URL+"/pies/")
-	pie := new(assessment.Pie)
+	pie := new(plugin.Pie)
 	err := s.Database.C("pies").FindId(bson.ObjectIdHex(pieID)).One(pie)
 	util.CheckErr(err)
 	// TODO: This should really be full patient URL
@@ -487,7 +485,7 @@ func (s *ServiceSuite) TestGetRiskAssessmentDeleteURL(c *C) {
 }
 
 func (s *ServiceSuite) TestGetRequiredDataQueryURLForCHADS(c *C) {
-	s.Service.RegisterPlugin(chads.NewCHA2DS2VAScPlugin())
+	s.Service.RegisterPlugin(assessments.NewCHA2DS2VAScPlugin())
 	qURL, err := s.Service.getRequiredDataQueryURL("12345", "http://example.org/fhir")
 	util.CheckErr(err)
 	c.Assert(strings.HasPrefix(qURL, "http://example.org/fhir/Patient?"), Equals, true)
@@ -499,7 +497,7 @@ func (s *ServiceSuite) TestGetRequiredDataQueryURLForCHADS(c *C) {
 }
 
 func (s *ServiceSuite) TestGetRequiredDataQueryURLForSimple(c *C) {
-	s.Service.RegisterPlugin(simple.NewSimplePlugin())
+	s.Service.RegisterPlugin(assessments.NewSimplePlugin())
 	qURL, err := s.Service.getRequiredDataQueryURL("12345", "http://example.org/fhir")
 	util.CheckErr(err)
 	c.Assert(strings.HasPrefix(qURL, "http://example.org/fhir/Patient?"), Equals, true)
@@ -520,8 +518,8 @@ func (s *ServiceSuite) TestGetRequiredDataQueryURLForSimple(c *C) {
 }
 
 func (s *ServiceSuite) TestGetRequiredDataQueryURLForCHADSandSimple(c *C) {
-	s.Service.RegisterPlugin(chads.NewCHA2DS2VAScPlugin())
-	s.Service.RegisterPlugin(simple.NewSimplePlugin())
+	s.Service.RegisterPlugin(assessments.NewCHA2DS2VAScPlugin())
+	s.Service.RegisterPlugin(assessments.NewSimplePlugin())
 	qURL, err := s.Service.getRequiredDataQueryURL("12345", "http://example.org/fhir")
 	util.CheckErr(err)
 	c.Assert(strings.HasPrefix(qURL, "http://example.org/fhir/Patient?"), Equals, true)
@@ -545,28 +543,28 @@ func (s *ServiceSuite) TestBuildRiskAssessmentBundle(c *C) {
 		{
 			AsOf:  time.Date(2000, 7, 14, 15, 59, 59, 999, time.UTC),
 			Score: &one,
-			Pie:   assessment.NewPie(s.Server.URL + "/Patient/12345"),
+			Pie:   plugin.NewPie(s.Server.URL + "/Patient/12345"),
 		}, {
 			AsOf:  time.Date(2000, 7, 14, 16, 0, 0, 0, time.UTC),
 			Score: &one,
-			Pie:   assessment.NewPie(s.Server.URL + "/Patient/12345"),
+			Pie:   plugin.NewPie(s.Server.URL + "/Patient/12345"),
 		}, {
 			AsOf:  time.Date(2012, 1, 1, 11, 0, 0, 0, time.UTC),
 			Score: &three,
-			Pie:   assessment.NewPie(s.Server.URL + "/Patient/12345"),
+			Pie:   plugin.NewPie(s.Server.URL + "/Patient/12345"),
 		}, {
 			AsOf:  time.Date(2013, 1, 1, 11, 0, 0, 0, time.UTC),
 			Score: &four,
-			Pie:   assessment.NewPie(s.Server.URL + "/Patient/12345"),
+			Pie:   plugin.NewPie(s.Server.URL + "/Patient/12345"),
 		}, {
 			AsOf:  time.Date(2014, 2, 3, 10, 0, 0, 0, time.UTC),
 			Score: &two,
-			Pie:   assessment.NewPie(s.Server.URL + "/Patient/12345"),
+			Pie:   plugin.NewPie(s.Server.URL + "/Patient/12345"),
 		},
 	}
 
 	pieBasisURL := "http://example.org/Pie"
-	simplePlugin := simple.NewSimplePlugin()
+	simplePlugin := assessments.NewSimplePlugin()
 	bundle := buildRiskAssessmentBundle("12345", results, pieBasisURL, simplePlugin)
 
 	c.Assert(bundle, NotNil)

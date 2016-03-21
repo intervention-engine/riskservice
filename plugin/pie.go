@@ -1,4 +1,4 @@
-package assessment
+package plugin
 
 import (
 	"time"
@@ -41,14 +41,6 @@ func (p *Pie) Clone(generateNewID bool) *Pie {
 	cloned.Slices = make([]Slice, len(p.Slices))
 	copy(cloned.Slices, p.Slices)
 	return &cloned
-}
-
-func (p *Pie) AddSlice(name string, weight int, value ...int) {
-	slice := Slice{Name: name, Weight: weight, Value: value[0]}
-	if len(value) == 2 {
-		slice.MaxValue = value[1]
-	}
-	p.Slices = append(p.Slices, slice)
 }
 
 func (p *Pie) UpdateSliceValue(name string, value int) {

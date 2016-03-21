@@ -1,10 +1,9 @@
-package simple
+package assessments
 
 import (
 	"time"
 
 	"github.com/intervention-engine/fhir/models"
-	"github.com/intervention-engine/riskservice/assessment"
 	"github.com/intervention-engine/riskservice/plugin"
 )
 
@@ -27,7 +26,7 @@ func (c *SimplePlugin) Config() plugin.RiskServicePluginConfig {
 			Text:   "Simple Conditions + Medications",
 		},
 		PredictedOutcome: models.CodeableConcept{Text: "Negative Outcome"},
-		DefaultPieSlices: []assessment.Slice{
+		DefaultPieSlices: []plugin.Slice{
 			{Name: "Conditions", Weight: 50, MaxValue: 5},
 			{Name: "Medications", Weight: 50, MaxValue: 5},
 		},
@@ -44,7 +43,7 @@ func (c *SimplePlugin) Calculate(es *plugin.EventStream, fhirEndpointURL string)
 	mMap := make(map[string]int)
 
 	// Create the initial pie
-	pie := assessment.NewPie(fhirEndpointURL + "/Patient/" + es.Patient.Id)
+	pie := plugin.NewPie(fhirEndpointURL + "/Patient/" + es.Patient.Id)
 	pie.Slices = c.Config().DefaultPieSlices
 
 	// Now go through the event stream, updating the pie
