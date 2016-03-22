@@ -179,6 +179,9 @@ func BundleToEventStream(bundle *models.Bundle) (es *plugin.EventStream, err err
 			}
 			patient = r
 		case *models.Condition:
+			if r.VerificationStatus != "confirmed" {
+				continue
+			}
 			if onset, err := findDate(false, r.OnsetDateTime, r.OnsetPeriod, r.DateRecorded); err == nil {
 				events = append(events, plugin.Event{Date: onset, Type: "Condition", End: false, Value: r})
 			}
@@ -187,6 +190,9 @@ func BundleToEventStream(bundle *models.Bundle) (es *plugin.EventStream, err err
 			}
 			// TODO: What happens if there is no date at all?
 		case *models.MedicationStatement:
+			if r.Status == "" || r.Status == "entered-in-error" {
+				continue
+			}
 			if active, err := findDate(false, r.EffectiveDateTime, r.EffectivePeriod, r.DateAsserted); err == nil {
 				events = append(events, plugin.Event{Date: active, Type: "MedicationStatement", End: false, Value: r})
 			}
@@ -195,6 +201,9 @@ func BundleToEventStream(bundle *models.Bundle) (es *plugin.EventStream, err err
 			}
 			// TODO: What happens if there is no date at all?
 		case *models.Observation:
+			if r.Status != "final" && r.Status != "amended" && r.Status != "preliminary" && r.Status != "registered" {
+				continue
+			}
 			if effective, err := findDate(false, r.EffectiveDateTime, r.EffectivePeriod, r.Issued); err == nil {
 				events = append(events, plugin.Event{Date: effective, Type: "Observation", End: false, Value: r})
 			}

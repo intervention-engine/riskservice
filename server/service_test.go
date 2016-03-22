@@ -369,6 +369,41 @@ func (s *ServiceSuite) TestBundleToEventStream(c *C) {
 	c.Assert(es.Events[4].Value, DeepEquals, bundle.Entry[3].Resource)
 }
 
+func (s *ServiceSuite) TestUnconfirmedResourcesDontGenerateEvents(c *C) {
+	data, err := ioutil.ReadFile("fixtures/brad_bradworth_event_source_bundle.json")
+	util.CheckErr(err)
+
+	bundle := new(models.Bundle)
+	json.Unmarshal(data, bundle)
+
+	// Switch a few resources to be unconfirmed
+	bundle.Entry[2].Resource.(*models.Condition).VerificationStatus = "refuted"
+	bundle.Entry[4].Resource.(*models.MedicationStatement).Status = "entered-in-error"
+
+	es, err := BundleToEventStream(bundle)
+	util.CheckErr(err)
+
+	c.Assert(es.Patient, NotNil)
+	c.Assert(es.Patient.Id, Equals, "507f1f77bcf86cd799439001")
+	c.Assert(es.Events, HasLen, 3)
+	loc := time.FixedZone("-0500", -5*60*60)
+	// Event 0 (Condition: Atrial Fibrillation)
+	c.Assert(es.Events[0].Date.Equal(time.Date(2012, time.September, 20, 8, 0, 0, 0, loc)), Equals, true)
+	c.Assert(es.Events[0].Type, Equals, "Condition")
+	c.Assert(es.Events[0].End, Equals, false)
+	c.Assert(es.Events[0].Value, DeepEquals, bundle.Entry[1].Resource)
+	// Event 1 (Condition: Cerebral infarction due to cerebral artery occlusion)
+	c.Assert(es.Events[1].Date.Equal(time.Date(2014, time.January, 17, 20, 35, 0, 0, loc)), Equals, true)
+	c.Assert(es.Events[1].Type, Equals, "Condition")
+	c.Assert(es.Events[1].End, Equals, false)
+	c.Assert(es.Events[1].Value, DeepEquals, bundle.Entry[3].Resource)
+	// Event 2 (Condition END: Cerebral infarction due to cerebral artery occlusion)
+	c.Assert(es.Events[2].Date.Equal(time.Date(2014, time.January, 17, 20, 40, 0, 0, loc)), Equals, true)
+	c.Assert(es.Events[2].Type, Equals, "Condition")
+	c.Assert(es.Events[2].End, Equals, true)
+	c.Assert(es.Events[2].Value, DeepEquals, bundle.Entry[3].Resource)
+}
+
 func (s *ServiceSuite) TestAddSignificantBirthdays(c *C) {
 	bd := time.Date(1950, time.March, 1, 12, 0, 0, 0, time.UTC)
 	es := &plugin.EventStream{
