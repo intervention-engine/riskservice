@@ -131,7 +131,7 @@ func (rs *ReferenceRiskService) Calculate(patientID string, fhirEndpointURL stri
 	return nil
 }
 
-// getRiskAssessmentDeleteURL constructs the URL to use for identifying all risk assessments for a given patient
+// getRequiredDataQueryURL constructs the URL to use for identifying all risk assessments for a given patient
 // using a given method.  This is used to delete the old set of assessments before adding the new set.
 func (rs *ReferenceRiskService) getRequiredDataQueryURL(patientID, fhirEndpointURL string) (string, error) {
 	// Build up the query by finding all the resources we must _revinclude
