@@ -6,11 +6,11 @@ import (
 	"log"
 	"net"
 	"os"
-	"sync"
+	"time"
 
 	"github.com/intervention-engine/fhir/models"
 	"github.com/intervention-engine/fhir/upload"
-	"github.com/intervention-engine/riskservice/assessment"
+	"github.com/intervention-engine/riskservice/assessments"
 	"github.com/intervention-engine/riskservice/server"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
@@ -40,23 +40,14 @@ func main() {
 		panic("Can't connect to the database")
 	}
 	defer session.Close()
-	// Set up a channel for calculation requests
-	requestChan := make(chan server.CalculationRequest)
-	// Set up a channel to shut down the calculation request runner
-	done := make(chan struct{})
-	defer close(done)
-	// WaitGroup lets us wait for the calculation requests to be processed before
-	// the application exits
-	var wg sync.WaitGroup
-	wg.Add(1)
-	defer wg.Wait()
-	basePieURL := discoverSelf() + "pies/"
+
+	basePieURL := discoverSelf() + "pies"
 	db := session.DB("riskservice")
-	riskAssessments := []server.RiskAssessmentCalculation{assessment.CalculateCHADSRisk, assessment.CalculateSimpleRisk}
-	// Kick off the calculation request runner
-	go server.Runner(requestChan, done, basePieURL, riskAssessments, db, &wg)
-	// Set up the Echo handlers
-	server.RegisterRiskHandlers(e, db, basePieURL, requestChan)
+	service := server.NewReferenceRiskService(db)
+	service.RegisterPlugin(assessments.NewCHA2DS2VAScPlugin())
+	service.RegisterPlugin(assessments.NewSimplePlugin())
+	fnDelayer := server.NewFunctionDelayer(3 * time.Second)
+	server.RegisterRoutes(e, db, basePieURL, service, fnDelayer)
 	e.Use(middleware.Logger())
 	e.Run(":9000")
 }
