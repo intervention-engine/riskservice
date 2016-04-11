@@ -4,13 +4,14 @@ import (
 	"fmt"
 
 	"github.com/intervention-engine/riskservice/plugin"
+	"github.com/intervention-engine/riskservice/service"
 	"github.com/labstack/echo"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )
 
 // RegisterRoutes sets up the http request handlers with Echo
-func RegisterRoutes(e *echo.Echo, db *mgo.Database, basePieURL string, service RiskService, fnDelayer *FunctionDelayer) {
+func RegisterRoutes(e *echo.Echo, db *mgo.Database, basePieURL string, service service.RiskService, fnDelayer *FunctionDelayer) {
 	e.Get("/pies/:id", func(c *echo.Context) (err error) {
 		pie := &plugin.Pie{}
 		id := c.Param("id")
