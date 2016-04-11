@@ -86,48 +86,54 @@ func (rs *ReferenceRiskService) Calculate(patientID string, fhirEndpointURL stri
 		}
 		results = sortAndConsolidate(results)
 
-		// Build up the bundle with risk assessments to delete and add
-		raBundle := buildRiskAssessmentBundle(patientID, results, basisPieURL, p)
-
-		// Submit the risk assessment bundle
-		data, err := json.Marshal(raBundle)
-		if err != nil {
-			return err
-		}
-		response, err = http.Post(fhirEndpointURL, "application/json", bytes.NewBuffer(data))
-		if err != nil {
-			return err
-		}
-		defer response.Body.Close()
-
-		if response.StatusCode != 200 {
-			return fmt.Errorf("Risk assessments did not post properly.  Received response code: %d", response.StatusCode)
-		}
-
-		// Delete the old pies
-		pieCollection := rs.db.C("pies")
-		method := p.Config().Method.Coding[0]
-		pieCollection.RemoveAll(bson.M{
-			"patient":       fhirEndpointURL + "/Patient/" + patientID,
-			"method.coding": bson.M{"$elemMatch": bson.M{"system": method.System, "code": method.Code}},
-		})
-
-		// Store the new pies along with their method (to identify by patient and method)
-		for i := range results {
-			method := p.Config().Method
-			pieWithMethod := struct {
-				plugin.Pie `bson:",inline"`
-				Method     *models.CodeableConcept `bson:"method"`
-			}{
-				*results[i].Pie,
-				&method,
-			}
-			if err = pieCollection.Insert(&pieWithMethod); err != nil {
-				return err
-			}
-		}
+		UpdateRiskAssessmentsAndPies(fhirEndpointURL, patientID, results, rs.db.C("pies"), basisPieURL, p.Config())
 	}
 
+	return nil
+}
+
+// UpdateRiskAssessmentsAndPies removes existing risk assessments from the FHIR server and replaces them with new ones.
+// It also removes old pies from the Mongo database and replaces them with new ones.
+func UpdateRiskAssessmentsAndPies(fhirEndpoint string, patientID string, results []plugin.RiskServiceCalculationResult, pieCollection *mgo.Collection, basisPieURL string, config plugin.RiskServicePluginConfig) error {
+	// Build up the bundle with risk assessments to delete and add
+	raBundle := buildRiskAssessmentBundle(patientID, results, basisPieURL, config)
+
+	// Submit the risk assessment bundle
+	data, err := json.Marshal(raBundle)
+	if err != nil {
+		return err
+	}
+	response, err := http.Post(fhirEndpoint, "application/json", bytes.NewBuffer(data))
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != 200 {
+		return fmt.Errorf("Risk assessments did not post properly.  Received response code: %d", response.StatusCode)
+	}
+
+	// Delete the old pies
+	method := config.Method.Coding[0]
+	pieCollection.RemoveAll(bson.M{
+		"patient":       fhirEndpoint + "/Patient/" + patientID,
+		"method.coding": bson.M{"$elemMatch": bson.M{"system": method.System, "code": method.Code}},
+	})
+
+	// Store the new pies along with their method (to identify by patient and method)
+	for i := range results {
+		method := config.Method
+		pieWithMethod := struct {
+			plugin.Pie `bson:",inline"`
+			Method     *models.CodeableConcept `bson:"method"`
+		}{
+			*results[i].Pie,
+			&method,
+		}
+		if err = pieCollection.Insert(&pieWithMethod); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -261,20 +267,20 @@ func findDate(usePeriodEnd bool, datesAndPeriods ...interface{}) (time.Time, err
 	return time.Time{}, errors.New("No date found")
 }
 
-func buildRiskAssessmentBundle(patientID string, results []plugin.RiskServiceCalculationResult, basisPieURL string, p plugin.RiskServicePlugin) *models.Bundle {
+func buildRiskAssessmentBundle(patientID string, results []plugin.RiskServiceCalculationResult, basisPieURL string, config plugin.RiskServicePluginConfig) *models.Bundle {
 	raBundle := &models.Bundle{}
 	raBundle.Type = "transaction"
 	raBundle.Entry = make([]models.BundleEntryComponent, len(results)+1)
 	raBundle.Entry[0].Request = &models.BundleEntryRequestComponent{
 		Method: "DELETE",
-		Url:    getRiskAssessmentDeleteURL(p.Config().Method, patientID),
+		Url:    getRiskAssessmentDeleteURL(config.Method, patientID),
 	}
 	for i := range results {
 		raBundle.Entry[i+1].Request = &models.BundleEntryRequestComponent{
 			Method: "POST",
 			Url:    "RiskAssessment",
 		}
-		ra := results[i].ToRiskAssessment(patientID, basisPieURL, p.Config())
+		ra := results[i].ToRiskAssessment(patientID, basisPieURL, config)
 		if (i + 1) == len(results) {
 			ra.Meta = &models.Meta{
 				Tag: []models.Coding{{System: "http://interventionengine.org/tags/", Code: "MOST_RECENT"}},
