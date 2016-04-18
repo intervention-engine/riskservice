@@ -1,4 +1,4 @@
-package server
+package service
 
 import (
 	"encoding/json"
@@ -600,7 +600,7 @@ func (s *ServiceSuite) TestBuildRiskAssessmentBundle(c *C) {
 
 	pieBasisURL := "http://example.org/Pie"
 	simplePlugin := assessments.NewSimplePlugin()
-	bundle := buildRiskAssessmentBundle("12345", results, pieBasisURL, simplePlugin)
+	bundle := buildRiskAssessmentBundle("12345", results, pieBasisURL, simplePlugin.Config())
 
 	c.Assert(bundle, NotNil)
 	c.Assert(bundle.Type, Equals, "transaction")
