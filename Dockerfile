@@ -7,7 +7,7 @@ ADD . /go/src/github.com/intervention-engine/riskservice
 
 WORKDIR /go/src/github.com/intervention-engine/riskservice
 RUN go get
-RUN go build riskservice.go
+RUN go build
 
 # Run the outyet command by default when the container starts.
 ENTRYPOINT /go/src/github.com/intervention-engine/riskservice/riskservice
