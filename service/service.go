@@ -79,6 +79,7 @@ func (rs *ReferenceRiskService) Calculate(patientID string, fhirEndpointURL stri
 		results, err := p.Calculate(esClone, fhirEndpointURL)
 		if err != nil {
 			if _, ok := err.(plugin.NotApplicableError); ok {
+				UpdateRiskAssessmentsAndPies(fhirEndpointURL, patientID, results, rs.db.C("pies"), basisPieURL, p.Config(), true)
 				continue
 			} else {
 				return err
@@ -86,7 +87,7 @@ func (rs *ReferenceRiskService) Calculate(patientID string, fhirEndpointURL stri
 		}
 		results = sortAndConsolidate(results)
 
-		UpdateRiskAssessmentsAndPies(fhirEndpointURL, patientID, results, rs.db.C("pies"), basisPieURL, p.Config())
+		UpdateRiskAssessmentsAndPies(fhirEndpointURL, patientID, results, rs.db.C("pies"), basisPieURL, p.Config(), false)
 	}
 
 	return nil
@@ -94,9 +95,15 @@ func (rs *ReferenceRiskService) Calculate(patientID string, fhirEndpointURL stri
 
 // UpdateRiskAssessmentsAndPies removes existing risk assessments from the FHIR server and replaces them with new ones.
 // It also removes old pies from the Mongo database and replaces them with new ones.
-func UpdateRiskAssessmentsAndPies(fhirEndpoint string, patientID string, results []plugin.RiskServiceCalculationResult, pieCollection *mgo.Collection, basisPieURL string, config plugin.RiskServicePluginConfig) error {
-	// Build up the bundle with risk assessments to delete and add
-	raBundle := buildRiskAssessmentBundle(patientID, results, basisPieURL, config)
+func UpdateRiskAssessmentsAndPies(fhirEndpoint string, patientID string, results []plugin.RiskServiceCalculationResult, pieCollection *mgo.Collection, basisPieURL string, config plugin.RiskServicePluginConfig, notApplicable bool) error {
+	var raBundle *models.Bundle
+
+	if notApplicable {
+		raBundle = buildNARiskAssessmentBundle(patientID, config)
+	} else {
+		// Build up the bundle with risk assessments to delete and add
+		raBundle = buildRiskAssessmentBundle(patientID, results, basisPieURL, config)
+	}
 
 	// Submit the risk assessment bundle
 	data, err := json.Marshal(raBundle)
@@ -287,6 +294,42 @@ func buildRiskAssessmentBundle(patientID string, results []plugin.RiskServiceCal
 			}
 		}
 		raBundle.Entry[i+1].Resource = ra
+	}
+	return raBundle
+}
+
+func buildNARiskAssessmentBundle(patientID string, config plugin.RiskServicePluginConfig) *models.Bundle {
+	raBundle := &models.Bundle{}
+	raBundle.Type = "transaction"
+	raBundle.Entry = make([]models.BundleEntryComponent, 2)
+	raBundle.Entry[0].Request = &models.BundleEntryRequestComponent{
+		Method: "DELETE",
+		Url:    getRiskAssessmentDeleteURL(config.Method, patientID),
+	}
+	raBundle.Entry[1].Request = &models.BundleEntryRequestComponent{
+		Method: "POST",
+		Url:    "RiskAssessment",
+	}
+	raBundle.Entry[1].Resource = &models.RiskAssessment{
+		DomainResource: models.DomainResource{
+			Resource: models.Resource{
+				Meta: &models.Meta{
+					Tag: []models.Coding{{System: "http://interventionengine.org/tags/", Code: "MOST_RECENT"}},
+				},
+			},
+		},
+		Subject: &models.Reference{Reference: "Patient/" + patientID},
+		Method:  &config.Method,
+		Date:    &models.FHIRDateTime{Time: time.Now(), Precision: models.Timestamp},
+		Prediction: []models.RiskAssessmentPredictionComponent{
+			{
+				ProbabilityCodeableConcept: &models.CodeableConcept{
+					Coding: []models.Coding{{System: "http://snomed.info/sct", Code: "385432009"}},
+					Text:   "Not applicable",
+				},
+				Outcome: &config.PredictedOutcome,
+			},
+		},
 	}
 	return raBundle
 }
