@@ -45,21 +45,18 @@ func (c *CHA2DS2VAScPlugin) Config() plugin.RiskServicePluginConfig {
 func (c *CHA2DS2VAScPlugin) Calculate(es *plugin.EventStream, fhirEndpointURL string) ([]plugin.RiskServiceCalculationResult, error) {
 	var results []plugin.RiskServiceCalculationResult
 
-	// COMMENTED OUT because frontend does not properly handle patients w/ no RiskAssessments,
-	// so we must proceed with at least on RiskAssessment of score 0 until "not applicable" is supported
-	//
-	// // First make sure there is AFIB in the history, since this score is only valid for patients with AFIB
-	// var hasAFib bool
-	// for i := 0; !hasAFib && i < len(es.Events); i++ {
-	// 	if es.Events[i].Type == "Condition" && !es.Events[i].End {
-	// 		if cond, ok := es.Events[i].Value.(*models.Condition); ok {
-	// 			hasAFib = fuzzyFindCondition("427.31", "http://hl7.org/fhir/sid/icd-9", cond)
-	// 		}
-	// 	}
-	// }
-	// if !hasAFib {
-	// 	return nil, plugin.NewNotApplicableError("CHA2DS2-VASc is only applicable to patients with Atrial Fibrillation")
-	// }
+	// First make sure there is AFIB in the history, since this score is only valid for patients with AFIB
+	var hasAFib bool
+	for i := 0; !hasAFib && i < len(es.Events); i++ {
+		if es.Events[i].Type == "Condition" && !es.Events[i].End {
+			if cond, ok := es.Events[i].Value.(*models.Condition); ok {
+				hasAFib = fuzzyFindCondition("427.31", "http://hl7.org/fhir/sid/icd-9", cond)
+			}
+		}
+	}
+	if !hasAFib {
+		return nil, plugin.NewNotApplicableError("CHA2DS2-VASc is only applicable to patients with Atrial Fibrillation")
+	}
 
 	// Create the initial pie based on gender
 	pie := plugin.NewPie(fhirEndpointURL + "/Patient/" + es.Patient.Id)
@@ -124,20 +121,6 @@ func (c *CHA2DS2VAScPlugin) Calculate(es *plugin.EventStream, fhirEndpointURL st
 				Pie:                pie,
 			})
 		}
-	}
-
-	// If there are no results, provide a 0 score for the current time
-	if len(results) == 0 {
-		zero := 0
-		zeroFlt := 0.0
-		defaultPie := plugin.NewPie(fhirEndpointURL + "/Patient/" + es.Patient.Id)
-		defaultPie.Slices = c.Config().DefaultPieSlices
-		results = append(results, plugin.RiskServiceCalculationResult{
-			AsOf:               time.Now(),
-			Score:              &zero,
-			ProbabilityDecimal: &zeroFlt,
-			Pie:                defaultPie,
-		})
 	}
 
 	return results, nil

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -209,6 +210,96 @@ func (s *ServiceSuite) TestEndToEndOverwritingCalculations(c *C) {
 		s.checkSimpleRiskAssessment(c, &ras[3], patientID, time.Date(2014, time.January, 17, 20, 40, 0, 0, loc), 3, true)
 		s.checkSimplePie(c, &ras[3], patientID, 2, 1)
 	}
+}
+
+func (s *ServiceSuite) TestEndToEndCalculationsWithNACHADS(c *C) {
+	// Get the test data for Chad Chadworth (for the CHADS test -- get it?)
+	data, err := os.Open("fixtures/chad_chadworth_bundle.json")
+	util.CheckErr(err)
+	defer data.Close()
+
+	// Remove the AFib entry (index 5) so he is Not Applicable
+	bundle := new(models.Bundle)
+	decoder := json.NewDecoder(data)
+	err = decoder.Decode(bundle)
+	util.CheckErr(err)
+	bundle.Entry = append(bundle.Entry[:5], bundle.Entry[6:]...)
+	b, err := json.Marshal(bundle)
+	util.CheckErr(err)
+
+	// Store Chad Chadworth's modified information to Mongo
+	res, err := http.Post(s.Server.URL+"/", "application/json", bytes.NewBuffer(b))
+	util.CheckErr(err)
+	defer res.Body.Close()
+
+	// Get the response so we can pull out the patient ID
+	decoder = json.NewDecoder(res.Body)
+	responseBundle := new(models.Bundle)
+	err = decoder.Decode(responseBundle)
+	util.CheckErr(err)
+	patientID := responseBundle.Entry[0].Resource.(*models.Patient).Id
+
+	// Confirm there are no risk assessments or pies
+	raCollection := s.Database.C("riskassessments")
+	count, err := raCollection.Count()
+	util.CheckErr(err)
+	c.Assert(count, Equals, 0)
+	piesCollection := s.Database.C("pies")
+	count, err = piesCollection.Count()
+	util.CheckErr(err)
+	c.Assert(count, Equals, 0)
+
+	// Now register the plugins and request the calculation!
+	s.Service.RegisterPlugin(assessments.NewCHA2DS2VAScPlugin())
+	s.Service.RegisterPlugin(assessments.NewSimplePlugin())
+
+	err = s.Service.Calculate(patientID, s.Server.URL, s.Server.URL+"/pies")
+	util.CheckErr(err)
+
+	count, err = raCollection.Find(bson.M{"method.coding.code": "CHADS"}).Count()
+	util.CheckErr(err)
+	c.Assert(count, Equals, 1)
+	count, err = raCollection.Find(bson.M{"method.coding.code": "Simple"}).Count()
+	util.CheckErr(err)
+	c.Assert(count, Equals, 4)
+	count, err = piesCollection.Count()
+	util.CheckErr(err)
+	c.Assert(count, Equals, 4)
+
+	var ras []models.RiskAssessment
+	err = raCollection.Find(bson.M{"method.coding.code": "CHADS"}).All(&ras)
+	util.CheckErr(err)
+
+	// Check that the CHADS is not applicable
+	c.Assert(ras, HasLen, 1)
+	ra := ras[0]
+	c.Assert(ra.Subject.Reference, Equals, "Patient/"+patientID)
+	c.Assert(ra.Method.MatchesCode("http://interventionengine.org/risk-assessments", "CHADS"), Equals, true)
+	c.Assert(time.Now().Sub(ra.Date.Time) < time.Minute, Equals, true)
+	c.Assert(ra.Prediction, HasLen, 1)
+	c.Assert(ra.Prediction[0].Outcome.Text, Equals, "Stroke")
+	c.Assert(ra.Prediction[0].ProbabilityCodeableConcept.Coding, HasLen, 1)
+	c.Assert(ra.Prediction[0].ProbabilityCodeableConcept.Coding[0].System, Equals, "http://snomed.info/sct")
+	c.Assert(ra.Prediction[0].ProbabilityCodeableConcept.Coding[0].Code, Equals, "385432009")
+	c.Assert(ra.Prediction[0].ProbabilityCodeableConcept.Text, Equals, "Not applicable")
+	c.Assert(ra.Basis, HasLen, 0)
+	c.Assert(ra.Meta.Tag, HasLen, 1)
+	c.Assert(ra.Meta.Tag[0], DeepEquals, models.Coding{System: "http://interventionengine.org/tags/", Code: "MOST_RECENT"})
+
+	// Simple should still be good
+	ras = nil
+	err = raCollection.Find(bson.M{"method.coding.code": "Simple"}).Sort("date.time").All(&ras)
+	util.CheckErr(err)
+
+	loc := time.FixedZone("-0500", -5*60*60)
+	s.checkSimpleRiskAssessment(c, &ras[0], patientID, time.Date(2012, time.September, 20, 8, 0, 0, 0, loc), 1, false)
+	s.checkSimplePie(c, &ras[0], patientID, 1, 0)
+	s.checkSimpleRiskAssessment(c, &ras[1], patientID, time.Date(2013, time.September, 2, 10, 0, 0, 0, loc), 3, false)
+	s.checkSimplePie(c, &ras[1], patientID, 2, 1)
+	s.checkSimpleRiskAssessment(c, &ras[2], patientID, time.Date(2014, time.January, 17, 20, 35, 0, 0, loc), 4, false)
+	s.checkSimplePie(c, &ras[2], patientID, 3, 1)
+	s.checkSimpleRiskAssessment(c, &ras[3], patientID, time.Date(2014, time.January, 17, 20, 40, 0, 0, loc), 3, true)
+	s.checkSimplePie(c, &ras[3], patientID, 2, 1)
 }
 
 func (s *ServiceSuite) checkCHADSRiskAssessment(c *C, ra *models.RiskAssessment, patientID string, date time.Time, probability float64, mostRecent bool) {
@@ -645,4 +736,53 @@ func (s *ServiceSuite) TestBuildRiskAssessmentBundle(c *C) {
 		c.Assert(*ra.Prediction[0].ProbabilityDecimal, Equals, float64(*result.Score))
 		c.Assert(ra.Subject.Reference, Equals, "Patient/12345")
 	}
+}
+
+func (s *ServiceSuite) TestBuildNARiskAssessmentBundle(c *C) {
+	simplePlugin := assessments.NewSimplePlugin()
+	bundle := buildNARiskAssessmentBundle("12345", simplePlugin.Config())
+
+	c.Assert(bundle, NotNil)
+	c.Assert(bundle.Type, Equals, "transaction")
+	c.Assert(bundle.Entry, HasLen, 2)
+
+	// First check the delete entry
+	entry := bundle.Entry[0]
+	c.Assert(entry.FullUrl, Equals, "")
+	c.Assert(entry.Link, HasLen, 0)
+	c.Assert(entry.Resource, IsNil)
+	c.Assert(entry.Response, IsNil)
+	c.Assert(entry.Search, IsNil)
+	c.Assert(entry.Request.Method, Equals, "DELETE")
+	delURL := entry.Request.Url
+	c.Assert(strings.HasPrefix(delURL, "RiskAssessment?"), Equals, true)
+	delValues, err := url.ParseQuery(strings.TrimPrefix(delURL, "RiskAssessment?"))
+	util.CheckErr(err)
+	c.Assert(delValues, HasLen, 2)
+	c.Assert(delValues.Get("patient"), Equals, "12345")
+	c.Assert(delValues.Get("method"), Equals, "http://interventionengine.org/risk-assessments|Simple")
+
+	// Now check the NA post entry
+	entry = bundle.Entry[1]
+	c.Assert(entry.FullUrl, Equals, "")
+	c.Assert(entry.Link, HasLen, 0)
+	c.Assert(entry.Response, IsNil)
+	c.Assert(entry.Search, IsNil)
+	c.Assert(entry.Request.Method, Equals, "POST")
+	c.Assert(entry.Request.Url, Equals, "RiskAssessment")
+	c.Assert(entry.Resource, NotNil)
+	ra, ok := entry.Resource.(*models.RiskAssessment)
+	c.Assert(ok, Equals, true)
+	c.Assert(ra.Id, Equals, "")
+	c.Assert(ra.Basis, HasLen, 0)
+	c.Assert(time.Now().Sub(ra.Date.Time) < time.Minute, Equals, true)
+	c.Assert(ra.Date.Precision, Equals, models.Precision(models.Timestamp))
+	c.Assert(*ra.Method, DeepEquals, simplePlugin.Config().Method)
+	c.Assert(ra.Prediction, HasLen, 1)
+	c.Assert(*ra.Prediction[0].Outcome, DeepEquals, simplePlugin.Config().PredictedOutcome)
+	c.Assert(ra.Prediction[0].ProbabilityCodeableConcept.Coding, HasLen, 1)
+	c.Assert(ra.Prediction[0].ProbabilityCodeableConcept.Coding[0].System, Equals, "http://snomed.info/sct")
+	c.Assert(ra.Prediction[0].ProbabilityCodeableConcept.Coding[0].Code, Equals, "385432009")
+	c.Assert(ra.Prediction[0].ProbabilityCodeableConcept.Text, Equals, "Not applicable")
+	c.Assert(ra.Subject.Reference, Equals, "Patient/12345")
 }
